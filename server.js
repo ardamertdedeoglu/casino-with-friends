@@ -16,8 +16,9 @@ const gameRooms = new Map();
 
 // Blackjack game logic
 class BlackjackGame {
-  constructor(roomId) {
+  constructor(roomId, io) {
     this.roomId = roomId;
+    this.io = io;
     this.players = new Map();
     this.deck = this.createDeck();
     this.gameState = 'waiting';
@@ -202,7 +203,7 @@ class BlackjackGame {
       console.log('🎩 Dealer reveals cards:', this.dealer.hand, 'Score:', this.dealer.score);
 
       // Dealer kartları açıldı, güncel durumu gönder
-      io.to(this.roomId).emit('game-update', this.getGameState());
+      this.io.to(this.roomId).emit('game-update', this.getGameState());
       console.log('📤 Dealer cards revealed to room:', this.roomId);
 
       // If dealer doesn't have blackjack, play according to rules
@@ -220,7 +221,7 @@ class BlackjackGame {
           console.log(`🎩 Dealer hit ${hitCount}:`, this.dealer.hand[this.dealer.hand.length - 1], 'New score:', this.dealer.score, 'Hand:', this.dealer.hand);
 
           // Dealer kart çekti, güncel durumu gönder
-          io.to(this.roomId).emit('game-update', this.getGameState());
+          this.io.to(this.roomId).emit('game-update', this.getGameState());
           console.log(`📤 Dealer hit ${hitCount} sent to room:`, this.roomId);
         }
         console.log('🎩 Dealer finished hitting. Final score:', this.dealer.score, 'Hand:', this.dealer.hand);
@@ -235,7 +236,7 @@ class BlackjackGame {
       console.log('🎩 Game finished with results:', this.results);
 
       // Game state'i client'lara gönder
-      io.to(this.roomId).emit('game-update', this.getGameState());
+      this.io.to(this.roomId).emit('game-update', this.getGameState());
       console.log('📤 Dealer turn completed and results sent to room:', this.roomId);
     }, 1500); // 1.5 saniye bekle ki dealer hamleleri görünsün
   }
@@ -372,7 +373,7 @@ app.prepare().then(() => {
       socket.join(roomId);
 
       if (!gameRooms.has(roomId)) {
-        gameRooms.set(roomId, new BlackjackGame(roomId));
+        gameRooms.set(roomId, new BlackjackGame(roomId, io));
         console.log(`🆕 Created new game room: ${roomId}`);
       }
 
