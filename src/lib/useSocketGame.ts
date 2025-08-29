@@ -51,8 +51,11 @@ export const useSocketGame = (roomId: string, playerName: string) => {
       transports: ['websocket', 'polling'],
       forceNew: true,
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      upgrade: true,
+      rememberUpgrade: true
     });
 
     socketRef.current = socket;
@@ -85,12 +88,18 @@ export const useSocketGame = (roomId: string, playerName: string) => {
 
     socket.on('connect_error', (error) => {
       console.error('🚨 Socket.IO connection error:', error.message);
+      console.error('Error name:', error.name);
+      console.error('Error stack:', error.stack);
       console.error('Full error object:', error);
+      console.error('Connection URL:', process.env.NODE_ENV === 'production'
+        ? process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app"
+        : "http://localhost:3000");
       setIsConnected(false);
     });
 
     socket.on('connect_failed', (error) => {
       console.error('🚨 Socket.IO connection failed:', error);
+      console.error('This usually means the server is not reachable or WebSocket is blocked');
       setIsConnected(false);
     });
 

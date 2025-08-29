@@ -293,12 +293,20 @@ app.prepare().then(() => {
 
   const io = new Server(httpServer, {
     cors: {
-      origin: dev ? "http://localhost:3000" : process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app",
-      methods: ["GET", "POST"]
+      origin: dev ? "http://localhost:3000" : [
+        "https://casino-with-friends-production.up.railway.app",
+        process.env.NEXT_PUBLIC_APP_URL
+      ].filter(Boolean),
+      methods: ["GET", "POST"],
+      credentials: true
     },
     allowEIO3: true,
     transports: ['polling', 'websocket'],
-    path: '/api/socket'
+    path: '/api/socket',
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 10000,
+    maxHttpBufferSize: 1e8
   });
 
   io.on('connection', (socket) => {
