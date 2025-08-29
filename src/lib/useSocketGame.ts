@@ -45,8 +45,8 @@ export const useSocketGame = (roomId: string, playerName: string) => {
     console.log('🔌 Initializing Socket.IO connection...');
 
     const socket = io(process.env.NODE_ENV === 'production'
-      ? process.env.NEXT_PUBLIC_APP_URL || "https://your-app.vercel.app"
-      : "http://localhost:3004", {
+      ? process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app"
+      : "http://localhost:3000", {
       path: '/api/socket',
       transports: ['websocket', 'polling'],
       forceNew: true,

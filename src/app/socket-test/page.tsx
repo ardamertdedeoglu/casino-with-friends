@@ -10,7 +10,7 @@ export default function SocketTest() {
   useEffect(() => {
     console.log('🔌 Initializing Socket.IO test connection...');
 
-    const socket = io("http://localhost:3004", {
+    const socket = io("http://localhost:3000", {
       path: '/api/socket',
       transports: ['websocket', 'polling']
     });
