@@ -49,7 +49,7 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId } = useSocketGame(roomId, playerName, joined);
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
 
   // Game state değiştiğinde loading'i kapat
   useEffect(() => {
@@ -103,6 +103,14 @@ export default function BlackjackGame() {
   const joinRoom = async () => {
     const trimmedName = playerName.trim();
     if (roomId && trimmedName && trimmedName.length >= 2 && trimmedName.length <= 15) {
+      // Error varsa temizle
+      if (error) {
+        // Error state'ini temizlemek için playerName'i değiştirip geri getir
+        const currentName = playerName;
+        setPlayerName('');
+        setTimeout(() => setPlayerName(currentName), 0);
+      }
+
       const id = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setPlayerId(id);
       await joinGame(id);
@@ -193,6 +201,14 @@ export default function BlackjackGame() {
             <p className="text-gray-600 text-sm mt-2">Oda: <span className="font-bold text-green-700">{roomId}</span></p>
           </div>
           <div className="space-y-6">
+            {error && (
+              <div className="bg-red-100 border-2 border-red-400 text-red-800 px-4 py-3 rounded-lg font-medium">
+                <div className="flex items-center">
+                  <span className="text-red-600 text-xl mr-2">⚠️</span>
+                  <span>{error}</span>
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-bold text-gray-800 mb-2">👤 İsminiz</label>
               <input

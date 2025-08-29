@@ -328,7 +328,7 @@ app.prepare().then(() => {
 
     socket.on('join-room', (data) => {
       const { roomId, playerName } = data;
-      console.log(`🎯 Player ${playerName} joining room ${roomId}`);
+      console.log(`🎯 Player ${playerName} (${socket.id}) joining room ${roomId}`);
       socket.join(roomId);
 
       if (!gameRooms.has(roomId)) {
@@ -337,8 +337,25 @@ app.prepare().then(() => {
       }
 
       const game = gameRooms.get(roomId);
-      game.addPlayer(socket.id, playerName);
-      console.log(`✅ Player ${playerName} added to room ${roomId}`);
+
+      // Aynı socket ID ile oyuncu zaten varsa, güncelleme yap
+      if (game.players.has(socket.id)) {
+        console.log(`🔄 Player ${playerName} (${socket.id}) already in room, updating name`);
+        const existingPlayer = game.players.get(socket.id);
+        existingPlayer.name = playerName; // İsim güncellemesi
+      } else {
+        // Aynı isimde oyuncu var mı kontrol et
+        const existingPlayerWithSameName = Array.from(game.players.values()).find(p => p.name === playerName);
+        if (existingPlayerWithSameName) {
+          console.log(`⚠️ Player with name "${playerName}" already exists, rejecting join`);
+          socket.emit('join-error', { message: `İsim "${playerName}" zaten kullanılıyor. Lütfen farklı bir isim seçin.` });
+          return;
+        }
+
+        // Yeni oyuncu ekle
+        game.addPlayer(socket.id, playerName);
+        console.log(`✅ New player ${playerName} (${socket.id}) added to room ${roomId}`);
+      }
 
       io.to(roomId).emit('game-update', game.getGameState());
       console.log(`📤 Game state sent to room ${roomId}`);

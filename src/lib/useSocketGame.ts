@@ -36,6 +36,7 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [socketId, setSocketId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   // Socket.IO bağlantısını başlat
@@ -89,6 +90,12 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
       if (isLoading) {
         setIsLoading(false);
       }
+    });
+
+    socket.on('join-error', (errorData) => {
+      console.error('🚨 Join room error:', errorData.message);
+      setError(errorData.message);
+      setIsLoading(false);
     });
 
     socket.on('connect_error', (error) => {
@@ -224,6 +231,7 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
     isConnected,
     isLoading,
     socketId,
+    error,
     joinGame,
     makeMove,
     startGame,
