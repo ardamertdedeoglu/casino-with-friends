@@ -293,7 +293,7 @@ app.prepare().then(() => {
 
   const io = new Server(httpServer, {
     cors: {
-      origin: dev ? "http://localhost:3004" : process.env.NEXT_PUBLIC_APP_URL || "https://your-app.vercel.app",
+      origin: dev ? "http://localhost:3000" : process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app",
       methods: ["GET", "POST"]
     },
     allowEIO3: true,

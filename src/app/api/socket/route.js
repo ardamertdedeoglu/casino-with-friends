@@ -233,7 +233,7 @@ function initSocketIO(res) {
     io = new SocketIOServer(httpServer, {
       cors: {
         origin: process.env.NODE_ENV === 'production'
-          ? process.env.NEXT_PUBLIC_APP_URL || "https://your-app.vercel.app"
+          ? process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app"
           : "http://localhost:3000",
         methods: ["GET", "POST"]
       },
