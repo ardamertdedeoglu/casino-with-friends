@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Casino with Friends
+
+A multiplayer casino game website built with Next.js, featuring Blackjack and more games to come. Play with your friends in real-time!
+
+## Features
+
+- **Multiplayer Blackjack**: Play blackjack with friends in real-time
+- **Real-time Communication**: Socket.io for instant game updates
+- **Modern UI**: Built with Next.js and Tailwind CSS
+- **Scalable Backend**: Express.js server with Socket.io
+- **Database Ready**: Supabase integration for user management and game persistence
+
+## Tech Stack
+
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Backend**: Express.js, Socket.io
+- **Database**: Supabase (optional)
+- **Real-time**: Socket.io
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+
+- npm or yarn
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <your-repo-url>
+cd casinowithfriends
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Set up environment variables (optional, for Supabase):
+Create a `.env.local` file in the root directory:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Running the Application
 
-## Learn More
+To run both frontend and backend together:
+```bash
+npm run dev:full
+```
 
-To learn more about Next.js, take a look at the following resources:
+This will start:
+- Frontend on http://localhost:3000
+- Backend on http://localhost:3001
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Alternative: Run separately
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Frontend only:
+```bash
+npm run dev
+```
 
-## Deploy on Vercel
+Backend only:
+```bash
+npm run backend
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## How to Play
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Open the website in multiple browser tabs/windows
+2. Each player enters the same Room ID and their name
+3. Click "Join Room" to enter the game
+4. Once all players have joined, click "Start Game"
+5. Take turns hitting or standing
+6. The dealer plays automatically when all players finish
+
+## Game Rules
+
+- Standard Blackjack rules apply
+- Dealer hits on 16, stands on 17
+- Aces count as 1 or 11
+- First to 21 wins, or closest without busting
+
+## Project Structure
+
+```
+├── src/
+│   ├── app/              # Next.js app directory
+│   ├── components/       # React components
+│   │   └── BlackjackGame.tsx
+│   └── lib/              # Utilities and hooks
+│       ├── supabase.ts
+│       └── useSocket.ts
+├── backend/              # Express.js server
+│   ├── server.js
+│   └── package.json
+└── public/               # Static assets
+```
+
+## Future Games
+
+- Poker
+- Roulette
+- Slots
+- Baccarat
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+MIT License - feel free to use this project for your own casino website!

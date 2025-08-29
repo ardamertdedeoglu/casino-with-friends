@@ -1,0 +1,419 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSocket } from '../lib/useSocket';
+
+interface Card {
+  suit: string;
+  value: string;
+}
+
+interface Player {
+  id: string;
+  name: string;
+  hand: Card[];
+  score: number;
+  bet: number;
+  status: string;
+}
+
+interface GameState {
+  roomId: string;
+  players: Player[];
+  dealer: { hand: Card[]; score: number; hiddenCard: boolean };
+  gameState: string;
+  currentPlayer: string;
+  results?: {
+    dealerBusted: boolean;
+    winners: Array<{ id: string; name: string; reason: string }>;
+    losers: Array<{ id: string; name: string; reason: string }>;
+    ties: Array<{ id: string; name: string; reason: string }>;
+  } | null;
+}
+
+export default function BlackjackGame() {
+  const { socket, isConnected } = useSocket();
+  const [roomId, setRoomId] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [joined, setJoined] = useState(false);
+
+  useEffect(() => {
+    if (socket) {
+      socket.on('game-update', (newGameState: GameState) => {
+        setGameState(newGameState);
+      });
+    }
+
+    return () => {
+      if (socket) {
+        socket.off('game-update');
+      }
+    };
+  }, [socket]);
+
+  const joinRoom = () => {
+    if (socket && roomId && playerName) {
+      socket.emit('join-room', { roomId, playerName });
+      setJoined(true);
+    }
+  };
+
+  const startGame = () => {
+    if (socket && roomId) {
+      socket.emit('start-game', roomId);
+    }
+  };
+
+  const hit = () => {
+    if (socket && roomId) {
+      socket.emit('hit', roomId);
+    }
+  };
+
+  const stand = () => {
+    if (socket && roomId) {
+      socket.emit('stand', roomId);
+    }
+  };
+
+  const renderCard = (card: Card) => {
+    const suitSymbols = {
+      hearts: '♥',
+      diamonds: '♦',
+      clubs: '♣',
+      spades: '♠'
+    };
+    const suitColors = {
+      hearts: 'text-red-600',
+      diamonds: 'text-red-600',
+      clubs: 'text-black',
+      spades: 'text-black'
+    };
+
+    return (
+      <div className="bg-white border-2 border-gray-300 rounded-lg p-3 m-2 text-center shadow-lg transform hover:scale-105 transition-transform duration-200 min-w-[60px] min-h-[80px] flex flex-col justify-between">
+        <div className="text-xl font-bold text-gray-800">{card.value}</div>
+        <div className={`text-2xl ${suitColors[card.suit as keyof typeof suitColors]}`}>
+          {suitSymbols[card.suit as keyof typeof suitSymbols]}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCardBack = () => {
+    return (
+      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 border-2 border-blue-400 rounded-lg p-3 m-2 text-center shadow-lg transform hover:scale-105 transition-transform duration-200 min-w-[60px] min-h-[80px] flex flex-col justify-center items-center">
+        <div className="text-white text-2xl font-bold">♠</div>
+        <div className="text-white text-xs">CASINO</div>
+        <div className="text-white text-2xl font-bold rotate-180">♠</div>
+      </div>
+    );
+  };
+
+  if (!joined) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center p-4">
+        <div className="bg-gradient-to-br from-yellow-50 via-white to-yellow-100 p-8 rounded-2xl shadow-2xl border-4 border-yellow-400 max-w-lg w-full backdrop-blur-sm">
+          <div className="text-center mb-8">
+            <h1 className="text-5xl font-bold text-gray-900 mb-3 drop-shadow-lg">🎰 Blackjack</h1>
+            <p className="text-gray-700 text-lg font-medium">Arkadaşlarınla oyna ve kazan!</p>
+          </div>
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-gray-800 mb-2">🎯 Oda ID</label>
+              <input
+                type="text"
+                placeholder="Örneğin: oyun123"
+                value={roomId}
+                onChange={(e) => setRoomId(e.target.value)}
+                className="w-full p-4 border-3 border-gray-400 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-800 mb-2">👤 İsminiz</label>
+              <input
+                type="text"
+                placeholder="Oyuncu adınızı girin"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                className="w-full p-4 border-3 border-gray-400 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
+              />
+            </div>
+            <button
+              onClick={joinRoom}
+              disabled={!isConnected}
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-500 disabled:border-gray-400"
+            >
+              {isConnected ? '🎲 Odaya Katıl' : '🔄 Bağlanıyor...'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!gameState) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-yellow-400 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-white mb-2">🎰 Oyun Hazırlanıyor</h2>
+          <p className="text-yellow-200">Arkadaşlarının katılmasını bekliyoruz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentPlayerData = gameState.players.find(p => p.id === socket?.id);
+  const isMyTurn = gameState.currentPlayer === socket?.id;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <h1 className="text-5xl font-bold text-yellow-400 mb-2 drop-shadow-lg">🎰 BLACKJACK</h1>
+          <div className="bg-black bg-opacity-50 rounded-lg p-4 inline-block">
+            <p className="text-yellow-200 font-semibold">Oda: <span className="text-white">{gameState.roomId}</span></p>
+            <p className="text-yellow-200 font-semibold">Durum: <span className="text-white capitalize">{gameState.gameState}</span></p>
+          </div>
+        </div>
+
+        {/* Dealer's hand */}
+        <div className="bg-gradient-to-r from-red-900 to-red-800 p-6 rounded-xl mb-6 shadow-2xl border-4 border-yellow-400">
+          <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KURPİYER</h2>
+          <div className="flex justify-center flex-wrap">
+            {gameState.dealer.hand.map((card, index) => (
+              <div
+                key={index}
+                className={`transition-transform duration-700 ${index === 1 && !gameState.dealer.hiddenCard ? 'animate-card-flip' : ''}`}
+              >
+                {index === 1 && gameState.dealer.hiddenCard ? renderCardBack() : renderCard(card)}
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-4">
+            <p className="text-yellow-300 text-lg font-semibold">Skor: <span className="text-white text-xl">{gameState.dealer.score}</span></p>
+          </div>
+        </div>
+
+        {/* Players */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {gameState.players.map((player) => {
+            // Determine player result for styling
+            let resultStyle = '';
+            let resultIcon = '';
+            let resultText = '';
+
+            if (gameState.gameState === 'finished' && gameState.results) {
+              const isWinner = gameState.results.winners.some(w => w.id === player.id);
+              const isLoser = gameState.results.losers.some(l => l.id === player.id);
+              const isTie = gameState.results.ties.some(t => t.id === player.id);
+
+              if (isWinner) {
+                resultStyle = 'border-green-500 bg-gradient-to-br from-green-100 to-green-200 ring-4 ring-green-300';
+                resultIcon = '🏆';
+                resultText = 'Kazandın!';
+              } else if (isLoser) {
+                resultStyle = 'border-red-500 bg-gradient-to-br from-red-100 to-red-200 ring-4 ring-red-300';
+                resultIcon = '❌';
+                resultText = 'Kaybettin!';
+              } else if (isTie) {
+                resultStyle = 'border-blue-500 bg-gradient-to-br from-blue-100 to-blue-200 ring-4 ring-blue-300';
+                resultIcon = '🤝';
+                resultText = 'Berabere!';
+              }
+            }
+
+            return (
+              <div key={player.id} className={`p-6 rounded-xl shadow-xl border-2 transition-all duration-300 ${
+                gameState.gameState === 'finished' && resultStyle
+                  ? resultStyle
+                  : isMyTurn && player.id === socket?.id
+                    ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
+                    : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
+              }`}>
+                <h3 className="text-xl font-bold text-gray-800 mb-3 text-center">
+                  {player.name}
+                  {player.id === socket?.id && <span className="text-blue-600 ml-2">(Sen)</span>}
+                  {isMyTurn && player.id === socket?.id && <span className="text-yellow-600 ml-2">🎯</span>}
+                  {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
+                </h3>
+                <div className="flex justify-center flex-wrap mb-4">
+                  {player.hand.map((card, index) => (
+                    <div key={index}>{renderCard(card)}</div>
+                  ))}
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                  <p className="text-gray-600 capitalize font-medium">
+                    {player.status === 'playing' && '🃏 Oynuyor'}
+                    {player.status === 'stood' && '✋ Durdu'}
+                    {player.status === 'busted' && '💥 Battı'}
+                  </p>
+                  {resultText && (
+                    <p className="text-lg font-bold mt-2" style={{
+                      color: resultText === 'Kazandın!' ? '#16a34a' :
+                             resultText === 'Kaybettin!' ? '#dc2626' : '#2563eb'
+                    }}>
+                      {resultText}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Game controls */}
+        {gameState.gameState === 'waiting' && (
+          <div className="text-center">
+            <button
+              onClick={startGame}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-green-500"
+            >
+              🎲 Oyunu Başlat
+            </button>
+          </div>
+        )}
+
+        {gameState.gameState === 'playing' && isMyTurn && currentPlayerData?.status === 'playing' && (
+          <div className="text-center space-x-6">
+            <button
+              onClick={hit}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-blue-500"
+            >
+              🃏 Kart Al (Hit)
+            </button>
+            <button
+              onClick={stand}
+              className="bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-red-700 hover:to-red-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-red-500"
+            >
+              ✋ Dur (Stand)
+            </button>
+          </div>
+        )}
+
+        {gameState.gameState === 'finished' && gameState.results && (
+          <>
+            {/* Backdrop */}
+            <div className="fixed inset-0 casino-pattern bg-gradient-to-br from-green-900 via-green-800 to-black bg-opacity-80 animate-backdrop-fade-in z-40"></div>
+
+            {/* Modal */}
+            <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+              <div className="bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-black p-6 rounded-3xl shadow-2xl border-4 border-yellow-300 max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-modal-slide-down">
+                {/* Header */}
+                <div className="text-center mb-8">
+                  <h2 className="text-6xl font-bold mb-4 drop-shadow-lg">🎉</h2>
+                  <h3 className="text-4xl font-bold mb-2">OYUN SONUCU</h3>
+                  <div className="w-24 h-1 bg-black mx-auto rounded-full"></div>
+                </div>
+
+                {/* Dealer Result - Hero Section */}
+                <div className="mb-8 p-6 bg-gradient-to-r from-black via-gray-900 to-black rounded-2xl border-4 border-yellow-400 shadow-2xl">
+                  <div className="text-center">
+                    <h3 className="text-3xl font-bold mb-4 text-yellow-300">🏠 KURPİYER</h3>
+                    <div className="text-7xl font-bold text-white mb-4 drop-shadow-lg">
+                      {gameState.dealer.score}
+                    </div>
+                    {gameState.results.dealerBusted && (
+                      <div className="animate-pulse">
+                        <p className="text-red-400 font-bold text-2xl mb-2">💥 BATTI!</p>
+                        <p className="text-yellow-200 text-lg">Tüm oyuncular kazandı!</p>
+                      </div>
+                    )}
+                    {!gameState.results.dealerBusted && gameState.dealer.score <= 21 && (
+                      <p className="text-green-400 font-bold text-xl">✅ {gameState.dealer.score} ile durdu</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Results Grid */}
+                <div className="grid md:grid-cols-3 gap-4 mb-8">
+                  {/* Winners */}
+                  {gameState.results.winners.length > 0 && (
+                    <div className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-2xl border-4 border-green-400 shadow-xl">
+                      <h4 className="text-xl font-bold text-green-800 mb-3 text-center flex items-center justify-center">
+                        <span className="text-2xl mr-2">🏆</span>
+                        KAZANAN
+                      </h4>
+                      <div className="space-y-2">
+                        {gameState.results.winners.map((winner) => (
+                          <div key={winner.id} className="bg-white p-3 rounded-lg border-2 border-green-300 shadow-sm">
+                            <div className="font-bold text-sm text-green-900">{winner.name}</div>
+                            <div className="text-green-700 text-xs mt-1">
+                              {winner.reason === 'dealer_busted' && '🎉 Battı!'}
+                              {winner.reason === 'higher_score' && '📈 Yüksek!'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Losers */}
+                  {gameState.results.losers.length > 0 && (
+                    <div className="bg-gradient-to-br from-red-100 to-red-200 p-4 rounded-2xl border-4 border-red-400 shadow-xl">
+                      <h4 className="text-xl font-bold text-red-800 mb-3 text-center flex items-center justify-center">
+                        <span className="text-2xl mr-2">❌</span>
+                        KAYBEDEN
+                      </h4>
+                      <div className="space-y-2">
+                        {gameState.results.losers.map((loser) => (
+                          <div key={loser.id} className="bg-white p-3 rounded-lg border-2 border-red-300 shadow-sm">
+                            <div className="font-bold text-sm text-red-900">{loser.name}</div>
+                            <div className="text-red-700 text-xs mt-1">
+                              {loser.reason === 'busted' && '💥 Battı!'}
+                              {loser.reason === 'lower_score' && '📉 Düşük!'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ties */}
+                  {gameState.results.ties.length > 0 && (
+                    <div className="bg-gradient-to-br from-blue-100 to-blue-200 p-4 rounded-2xl border-4 border-blue-400 shadow-xl">
+                      <h4 className="text-xl font-bold text-blue-800 mb-3 text-center flex items-center justify-center">
+                        <span className="text-2xl mr-2">🤝</span>
+                        BERABERE
+                      </h4>
+                      <div className="space-y-2">
+                        {gameState.results.ties.map((tie) => (
+                          <div key={tie.id} className="bg-white p-3 rounded-lg border-2 border-blue-300 shadow-sm">
+                            <div className="font-bold text-sm text-blue-900">{tie.name}</div>
+                            <div className="text-blue-700 text-xs mt-1">⚖️ Eşit!</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button
+                    onClick={startGame}
+                    className="bg-gradient-to-r from-green-600 to-green-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-green-700 hover:to-green-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-green-500 flex items-center justify-center"
+                  >
+                    <span className="text-2xl mr-3">🔄</span>
+                    YENİDEN OYNA
+                  </button>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-blue-500 flex items-center justify-center"
+                  >
+                    <span className="text-2xl mr-3">🆕</span>
+                    YENİ ODA
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
