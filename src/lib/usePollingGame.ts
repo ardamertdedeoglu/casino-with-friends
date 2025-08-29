@@ -101,15 +101,36 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     }
   }, [roomId, playerName, fetchGameState]);
 
+  // Oyundan çık
+  const leaveGame = useCallback(async (playerId: string) => {
+    if (!roomId || !playerId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'leave', playerId })
+      });
+
+      if (response.ok) {
+        await fetchGameState();
+      } else {
+        console.error('Failed to leave game');
+      }
+    } catch (error) {
+      console.error('Leave game error:', error);
+    }
+  }, [roomId, fetchGameState]);
+
   // Oyunu başlat
   const startGame = useCallback(async () => {
     if (!roomId) return;
 
     try {
-      const response = await fetch(`/api/game/${roomId}/start`, {
+      const response = await fetch(`/api/game/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerName })
+        body: JSON.stringify({ action: 'start', playerName })
       });
 
       if (response.ok) {
@@ -119,6 +140,27 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       }
     } catch (error) {
       console.error('Start game error:', error);
+    }
+  }, [roomId, playerName, fetchGameState]);
+
+  // Oyunu yeniden başlat
+  const restartGame = useCallback(async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restart', playerName })
+      });
+
+      if (response.ok) {
+        await fetchGameState();
+      } else {
+        console.error('Failed to restart game');
+      }
+    } catch (error) {
+      console.error('Restart game error:', error);
     }
   }, [roomId, playerName, fetchGameState]);
 
@@ -141,6 +183,8 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     joinGame,
     makeMove,
     startGame,
+    restartGame,
+    leaveGame,
     fetchGameState
   };
 };

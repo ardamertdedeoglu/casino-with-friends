@@ -41,7 +41,22 @@ export default function BlackjackGame() {
   const [playerName, setPlayerName] = useState('');
   const [joined, setJoined] = useState(false);
   const [playerId, setPlayerId] = useState('');
-  const { gameState, joinGame, makeMove, isLoading } = usePollingGame(roomId, playerName);
+  const { gameState, joinGame, makeMove, restartGame, leaveGame, isLoading } = usePollingGame(roomId, playerName);
+
+  // Component unmount olduğunda player'ı odadan çıkar
+  useEffect(() => {
+    return () => {
+      if (playerId && roomId) {
+        leaveGame(playerId);
+      }
+    };
+  }, [playerId, roomId, leaveGame]);
+
+  const handleLeaveGame = async () => {
+    if (playerId && roomId) {
+      await leaveGame(playerId);
+    }
+  };
 
   const joinRoom = async () => {
     if (roomId && playerName) {
@@ -67,12 +82,6 @@ export default function BlackjackGame() {
   const stand = async () => {
     if (roomId && playerId) {
       await makeMove('stand', playerId);
-    }
-  };
-
-  const restartGame = async () => {
-    if (roomId) {
-      await makeMove('restart');
     }
   };
 
@@ -117,6 +126,7 @@ export default function BlackjackGame() {
         <div className="absolute top-4 left-4">
           <Link
             href="/"
+            onClick={handleLeaveGame}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-full font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center"
           >
             <span className="text-xl mr-2">⬅️</span>
@@ -176,6 +186,7 @@ export default function BlackjackGame() {
         <div className="mb-4">
           <Link
             href="/"
+            onClick={handleLeaveGame}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
           >
             <span className="text-lg mr-2">⬅️</span>
@@ -468,6 +479,7 @@ export default function BlackjackGame() {
                   )}
                   <Link
                     href="/"
+                    onClick={handleLeaveGame}
                     className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-blue-500 flex items-center justify-center"
                   >
                     <span className="text-2xl mr-3">⬅️</span>

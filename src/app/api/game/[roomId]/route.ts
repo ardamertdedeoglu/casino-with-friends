@@ -301,6 +301,27 @@ class BlackjackGame {
       results: this.results
     };
   }
+
+  resetGame() {
+    // Mevcut oyuncuları koru ama durumlarını sıfırla
+    for (const player of this.players.values()) {
+      player.hand = [];
+      player.score = 0;
+      player.bet = 0;
+      player.status = 'playing';
+      player.isBlackjack = false;
+    }
+
+    // Yeni deste oluştur
+    this.deck = this.createDeck();
+    this.dealer.hand = [];
+    this.dealer.score = 0;
+    this.dealer.isBlackjack = false;
+    this.dealer.hiddenCard = false;
+    this.gameState = 'waiting';
+    this.currentPlayer = null;
+    this.results = null;
+  }
 }
 
 // Ana game route - GET: oyun durumunu al, POST: yeni oyun oluştur
@@ -363,10 +384,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
         break;
 
+      case 'leave':
+        if (playerId) {
+          game.players.delete(playerId);
+        }
+        break;
+
       case 'restart':
-        // Yeni oyun oluştur
-        game = new BlackjackGame(roomId);
-        gameRooms.set(roomId, game);
+        // Mevcut oyuncuları koruyarak yeni oyun başlat
+        game.resetGame();
         break;
 
       default:
