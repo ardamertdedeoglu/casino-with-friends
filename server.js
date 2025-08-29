@@ -183,21 +183,25 @@ class BlackjackGame {
 
       // If dealer doesn't have blackjack, play according to rules
       if (!this.dealer.isBlackjack) {
+        console.log('🎩 Dealer does not have blackjack, checking if needs to hit...');
+        console.log('🎩 Dealer current score:', this.dealer.score, 'Hand:', this.dealer.hand);
         let hitCount = 0;
         while (this.dealer.score < 17) {
-          console.log('🎩 Dealer hits...');
+          console.log(`🎩 Dealer score ${this.dealer.score} < 17, dealer will hit...`);
           this.dealer.hand.push(this.dealCard());
           const newScoreResult = this.calculateScore(this.dealer.hand);
           this.dealer.score = newScoreResult.score;
           this.dealer.isBlackjack = newScoreResult.isBlackjack;
           hitCount++;
-          console.log(`🎩 Dealer hit ${hitCount}:`, this.dealer.hand[this.dealer.hand.length - 1], 'New score:', this.dealer.score);
+          console.log(`🎩 Dealer hit ${hitCount}:`, this.dealer.hand[this.dealer.hand.length - 1], 'New score:', this.dealer.score, 'Hand:', this.dealer.hand);
 
           // Dealer kart çekti, güncel durumu gönder
           io.to(this.roomId).emit('game-update', this.getGameState());
           console.log(`📤 Dealer hit ${hitCount} sent to room:`, this.roomId);
         }
-        console.log('🎩 Dealer stands with score:', this.dealer.score);
+        console.log('🎩 Dealer finished hitting. Final score:', this.dealer.score, 'Hand:', this.dealer.hand);
+      } else {
+        console.log('🎩 Dealer has blackjack, skipping hit phase');
       }
 
       // Dealer hamleleri bitti, sonuçları hesapla
