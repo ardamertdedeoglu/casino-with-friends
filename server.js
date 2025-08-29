@@ -135,12 +135,12 @@ class BlackjackGame {
       if (player.score > 21) {
         player.status = 'busted';
         console.log(`💥 Player ${playerId} busted with score: ${player.score}`);
+        this.nextPlayer(); // Sadece busted olduğunda sıradaki oyuncuya geç
       } else {
         console.log(`🎯 Player ${playerId} hit, new score: ${player.score}`);
+        // Busted olmadıysa, aynı oyuncunun sırası devam eder
+        // nextPlayer() çağrılMAZ!
       }
-
-      // Her hit işleminden sonra sıradaki oyuncuya geç
-      this.nextPlayer();
     }
   }
 
