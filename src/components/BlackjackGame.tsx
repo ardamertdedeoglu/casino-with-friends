@@ -51,6 +51,17 @@ export default function BlackjackGame() {
   const [newPlayerName, setNewPlayerName] = useState('');
   const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId } = useSocketGame(roomId, playerName, joined);
 
+  // Game state değiştiğinde loading'i kapat
+  useEffect(() => {
+    if (gameState && gameState.gameState !== 'waiting' && isLoading) {
+      // Kısa bir gecikme ile loading'i kapat ki UI daha stabil görünsün
+      const timer = setTimeout(() => {
+        // Bu kısım useSocketGame'da zaten hallediliyor
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState, isLoading]);
+
   // Component unmount olduğunda player'ı odadan çıkar - kaldırıldı çünkü sorun yaratıyor
 
   const handleLeaveGame = async () => {
@@ -405,9 +416,14 @@ export default function BlackjackGame() {
           <div className="text-center">
             <button
               onClick={startGame}
-              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-green-500"
+              disabled={isLoading}
+              className={`px-8 py-4 rounded-xl font-bold text-lg shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 ${
+                isLoading
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-gray-500'
+                  : 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 border-green-500'
+              }`}
             >
-              🎲 Oyunu Başlat
+              {isLoading ? '🎲 Oyun Başlatılıyor...' : '🎲 Oyunu Başlat'}
             </button>
           </div>
         )}

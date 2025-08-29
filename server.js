@@ -349,13 +349,18 @@ app.prepare().then(() => {
       console.log(`Current players in room:`, Array.from(gameRooms.get(roomId)?.players.keys() || []));
       const game = gameRooms.get(roomId);
       if (game) {
+        console.log(`✅ Game room found, starting game...`);
         game.startGame();
         console.log(`Game started. Current player: ${game.currentPlayer}`);
-        console.log(`Player statuses:`, Array.from(game.players.values()).map(p => ({ name: p.name, status: p.status })));
+        console.log(`Player statuses:`, Array.from(game.players.values()).map(p => ({ name: p.name, status: p.status, isBlackjack: p.isBlackjack })));
+        console.log(`Dealer hand:`, game.dealer.hand);
+        console.log(`Dealer score:`, game.dealer.score);
+        console.log(`Dealer hidden:`, game.dealer.hiddenCard);
         io.to(roomId).emit('game-update', game.getGameState());
         console.log(`📤 Game started in room ${roomId}`);
       } else {
         console.log(`❌ Game not found for room ${roomId}`);
+        console.log(`Available rooms:`, Array.from(gameRooms.keys()));
       }
     });
 

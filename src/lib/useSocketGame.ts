@@ -84,6 +84,11 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
       console.log('My socket ID:', socket.id);
       console.log('Is it my turn?', newGameState.currentPlayer === socket.id);
       setGameState(newGameState);
+
+      // Game state güncellendiğinde loading'i kapat
+      if (isLoading) {
+        setIsLoading(false);
+      }
     });
 
     socket.on('connect_error', (error) => {
@@ -160,8 +165,7 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
 
     socketRef.current.emit('start-game', roomId);
 
-    // Kısa bir gecikme sonrası loading'i kapat
-    setTimeout(() => setIsLoading(false), 1000);
+    // Loading'i game-update event'i geldiğinde kapatacağız
   }, [roomId, isConnected]);
 
   // Oyunu yeniden başlat
