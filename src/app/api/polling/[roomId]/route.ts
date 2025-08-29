@@ -3,10 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 // Simple polling fallback API for Railway deployment
 const gameStates = new Map();
 
+interface Card {
+  suit: string;
+  value: string;
+}
+
 interface Player {
   id: string;
   name: string;
-  hand: any[];
+  hand: Card[];
   score: number;
   bet: number;
   status: string;
