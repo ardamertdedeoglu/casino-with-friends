@@ -10,10 +10,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.56.1",
     "next": "15.5.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "@supabase/supabase-js": "^2.56.1",
+    "socket": "^1.0.103",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
