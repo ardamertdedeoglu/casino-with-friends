@@ -106,6 +106,7 @@ class BlackjackGame {
       // If player has blackjack, they automatically stand
       if (player.isBlackjack) {
         player.status = 'stood';
+        console.log(`♠️ Player ${playerId} (${player.name}) got blackjack and auto-stood`);
       }
     }
 
@@ -133,8 +134,13 @@ class BlackjackGame {
 
       if (player.score > 21) {
         player.status = 'busted';
-        this.nextPlayer();
+        console.log(`💥 Player ${playerId} busted with score: ${player.score}`);
+      } else {
+        console.log(`🎯 Player ${playerId} hit, new score: ${player.score}`);
       }
+
+      // Her hit işleminden sonra sıradaki oyuncuya geç
+      this.nextPlayer();
     }
   }
 
@@ -142,27 +148,35 @@ class BlackjackGame {
     const player = this.players.get(playerId);
     if (player) {
       player.status = 'stood';
+      console.log(`🛑 Player ${playerId} (${player.name}) stood with score: ${player.score}`);
       this.nextPlayer();
     }
   }
 
   nextPlayer() {
+    console.log('🔄 nextPlayer() called');
     const playerIds = Array.from(this.players.keys());
     const currentIndex = playerIds.indexOf(this.currentPlayer);
     const nextIndex = (currentIndex + 1) % playerIds.length;
+
+    console.log('👥 Player statuses:', Array.from(this.players.values()).map(p => ({ id: p.id, name: p.name, status: p.status, score: p.score })));
+    console.log('🎯 Current player:', this.currentPlayer, 'Index:', currentIndex);
 
     let allFinished = true;
     for (const player of this.players.values()) {
       if (player.status === 'playing') {
         allFinished = false;
+        console.log('⏳ Player still playing:', player.id, player.name);
         break;
       }
     }
 
     if (allFinished) {
+      console.log('✅ All players finished, starting dealer turn...');
       this.dealerTurn();
     } else {
       this.currentPlayer = playerIds[nextIndex];
+      console.log('➡️ Next player:', this.currentPlayer, 'Index:', nextIndex);
     }
   }
 
