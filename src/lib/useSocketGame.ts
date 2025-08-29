@@ -66,9 +66,7 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
       setIsConnected(true);
       setSocketId(socket.id || null);
 
-      // Odaya katıl
-      console.log('🎯 Emitting join-room event:', { roomId, playerName });
-      socket.emit('join-room', { roomId, playerName });
+      // Socket bağlantısı kuruldu, artık joinGame fonksiyonu ile odaya katılabilir
     });
 
     socket.on('disconnect', () => {
@@ -126,13 +124,18 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [roomId, playerName]);
+  }, [roomId, playerName, joined]);
 
-  // Oyuna katıl (zaten socket bağlantısında yapılıyor)
+  // Oyuna katıl
   const joinGame = useCallback(async (playerId: string) => {
-    // Socket.IO ile otomatik olarak yapılıyor
-    console.log('🎯 Join game called, but handled by Socket.IO');
-  }, []);
+    if (!socketRef.current || !isConnected) {
+      console.error('🚨 Socket not connected, cannot join game');
+      return;
+    }
+
+    console.log('🎯 Emitting join-room event:', { roomId, playerName });
+    socketRef.current.emit('join-room', { roomId, playerName });
+  }, [roomId, playerName, isConnected]);
 
   // Hamle yap
   const makeMove = useCallback(async (action: string, playerId?: string) => {
