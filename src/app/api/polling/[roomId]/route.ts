@@ -20,10 +20,10 @@ interface Player {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    const roomId = params.roomId;
+    const { roomId } = await params;
     const playerId = request.nextUrl.searchParams.get('playerId');
 
     if (!roomId || !playerId) {
@@ -51,10 +51,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    const roomId = params.roomId;
+    const { roomId } = await params;
     const body = await request.json();
     const { playerId, playerName, action } = body;
 
