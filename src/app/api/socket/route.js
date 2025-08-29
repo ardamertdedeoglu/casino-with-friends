@@ -80,11 +80,15 @@ class BlackjackGame {
     for (const [playerId, player] of this.players) {
       player.status = 'playing';
       player.hand = [this.dealCard(), this.dealCard()];
-      player.score = this.calculateScore(player.hand);
+      const scoreResult = this.calculateScore(player.hand);
+      player.score = scoreResult.score;
+      player.isBlackjack = scoreResult.isBlackjack;
     }
 
     this.dealer.hand = [this.dealCard(), this.dealCard()];
-    this.dealer.score = this.calculateScore([this.dealer.hand[0]]);
+    const dealerScoreResult = this.calculateScore([this.dealer.hand[0]]);
+    this.dealer.score = dealerScoreResult.score;
+    this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
     this.dealer.hiddenCard = true;
 
     this.currentPlayer = Array.from(this.players.keys())[0];
@@ -94,7 +98,9 @@ class BlackjackGame {
     const player = this.players.get(playerId);
     if (player && player.status === 'playing') {
       player.hand.push(this.dealCard());
-      player.score = this.calculateScore(player.hand);
+      const scoreResult = this.calculateScore(player.hand);
+      player.score = scoreResult.score;
+      player.isBlackjack = scoreResult.isBlackjack;
       if (player.score > 21) {
         player.status = 'busted';
         this.nextPlayer();
@@ -132,11 +138,15 @@ class BlackjackGame {
 
   dealerTurn() {
     this.dealer.hiddenCard = false;
-    this.dealer.score = this.calculateScore(this.dealer.hand);
+    const dealerScoreResult = this.calculateScore(this.dealer.hand);
+    this.dealer.score = dealerScoreResult.score;
+    this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
 
     while (this.dealer.score < 17) {
       this.dealer.hand.push(this.dealCard());
-      this.dealer.score = this.calculateScore(this.dealer.hand);
+      const newScoreResult = this.calculateScore(this.dealer.hand);
+      this.dealer.score = newScoreResult.score;
+      this.dealer.isBlackjack = newScoreResult.isBlackjack;
     }
 
     this.calculateResults();
@@ -188,11 +198,21 @@ class BlackjackGame {
     this.results = results;
   }
 
+  getDealerVisibleScore() {
+    if (this.dealer.hand.length === 0) return 0;
+    if (this.dealer.hand.length === 1) return this.calculateScore([this.dealer.hand[0]]).score;
+    if (this.dealer.hiddenCard) return this.calculateScore([this.dealer.hand[0]]).score;
+    return this.dealer.score;
+  }
+
   getGameState() {
     return {
       roomId: this.roomId,
       players: Array.from(this.players.values()),
-      dealer: this.dealer,
+      dealer: {
+        ...this.dealer,
+        visibleScore: this.getDealerVisibleScore()
+      },
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
       results: this.results || null

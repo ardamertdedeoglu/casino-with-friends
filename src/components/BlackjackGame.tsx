@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { usePollingGame } from '../lib/usePollingGame';
+import { useSocketGame } from '../lib/useSocketGame';
 
 interface Card {
   suit: string;
@@ -23,7 +23,13 @@ interface Player {
 interface GameState {
   roomId: string;
   players: Player[];
-  dealer: { hand: Card[]; score: number; hiddenCard: boolean; isBlackjack?: boolean };
+  dealer: { 
+    hand: Card[]; 
+    score: number; 
+    hiddenCard: boolean; 
+    isBlackjack?: boolean; 
+    visibleScore: number 
+  };
   gameState: string;
   currentPlayer: string;
   results?: {
@@ -43,7 +49,7 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, fetchGameState, isLoading } = usePollingGame(roomId, playerName);
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId } = useSocketGame(roomId, playerName);
 
   // Component unmount olduğunda player'ı odadan çıkar - kaldırıldı çünkü sorun yaratıyor
 
@@ -100,14 +106,16 @@ export default function BlackjackGame() {
   };
 
   const hit = async () => {
-    if (roomId && playerId) {
-      await makeMove('hit', playerId);
+    if (roomId && socketId) {
+      console.log('🎯 Hit button clicked, socketId:', socketId);
+      await makeMove('hit', socketId);
     }
   };
 
   const stand = async () => {
-    if (roomId && playerId) {
-      await makeMove('stand', playerId);
+    if (roomId && socketId) {
+      console.log('🛑 Stand button clicked, socketId:', socketId);
+      await makeMove('stand', socketId);
     }
   };
 
@@ -211,8 +219,16 @@ export default function BlackjackGame() {
     );
   }
 
-  const currentPlayerData = gameState.players.find(p => p.id === playerId);
-  const isMyTurn = gameState.currentPlayer === playerId;
+  const isMyTurn = gameState.currentPlayer === socketId;
+  const currentPlayerData = gameState.players.find(p => p.id === socketId);
+
+  console.log('🎮 Game State:', gameState);
+  console.log('🎯 Is My Turn:', isMyTurn);
+  console.log('🔑 Socket ID:', socketId);
+  console.log('👤 Player ID:', playerId);
+  console.log('🎲 Current Player Data:', currentPlayerData);
+  console.log('🎲 Current Player Status:', currentPlayerData?.status);
+  console.log('🎲 Current Player Blackjack:', currentPlayerData?.isBlackjack);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
@@ -264,7 +280,7 @@ export default function BlackjackGame() {
             ))}
           </div>
           <div className="text-center mt-4">
-            <p className="text-yellow-300 text-lg font-semibold">Skor: <span className="text-white text-xl">{gameState.dealer.score}</span></p>
+            <p className="text-yellow-300 text-lg font-semibold">Skor: <span className="text-white text-xl">{gameState.dealer.visibleScore}</span></p>
             {gameState.dealer.isBlackjack && !gameState.dealer.hiddenCard && (
               <p className="text-red-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! 🃏</p>
             )}
@@ -324,8 +340,8 @@ export default function BlackjackGame() {
               }`}>
                 <h3 className="text-xl font-bold text-gray-800 mb-3 text-center">
                   {player.name}
-                  {player.id === playerId && <span className="text-blue-600 ml-2">(Sen)</span>}
-                  {isMyTurn && player.id === playerId && <span className="text-yellow-600 ml-2">🎯</span>}
+                  {player.id === socketId && <span className="text-blue-600 ml-2">(Sen)</span>}
+                  {isMyTurn && player.id === socketId && <span className="text-yellow-600 ml-2">🎯</span>}
                   {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                 </h3>
                 {player.id === playerId && (
@@ -473,7 +489,7 @@ export default function BlackjackGame() {
                       {gameState.dealer.isBlackjack && <span className="ml-3 text-yellow-400 text-2xl animate-pulse">♠♥</span>}
                     </h3>
                     <div className="text-7xl font-bold text-white mb-4 drop-shadow-lg">
-                      {gameState.dealer.score}
+                      {gameState.dealer.visibleScore}
                     </div>
                     {gameState.dealer.isBlackjack && (
                       <div className="animate-pulse mb-4">
@@ -487,7 +503,7 @@ export default function BlackjackGame() {
                       </div>
                     )}
                     {!gameState.results.dealerBusted && !gameState.dealer.isBlackjack && gameState.dealer.score <= 21 && (
-                      <p className="text-green-400 font-bold text-xl">✅ {gameState.dealer.score} ile durdu</p>
+                      <p className="text-green-400 font-bold text-xl">✅ {gameState.dealer.visibleScore} ile durdu</p>
                     )}
                   </div>
                 </div>

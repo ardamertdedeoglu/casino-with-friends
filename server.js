@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3004;
 
 // Initialize Next.js
 const app = next({ dev, hostname, port });
@@ -263,11 +263,21 @@ class BlackjackGame {
     this.results = results;
   }
 
+  getDealerVisibleScore() {
+    if (this.dealer.hand.length === 0) return 0;
+    if (this.dealer.hand.length === 1) return this.calculateScore([this.dealer.hand[0]]).score;
+    if (this.dealer.hiddenCard) return this.calculateScore([this.dealer.hand[0]]).score;
+    return this.dealer.score;
+  }
+
   getGameState() {
     return {
       roomId: this.roomId,
       players: Array.from(this.players.values()),
-      dealer: this.dealer,
+      dealer: {
+        ...this.dealer,
+        visibleScore: this.getDealerVisibleScore()
+      },
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
       results: this.results || null
@@ -283,11 +293,12 @@ app.prepare().then(() => {
 
   const io = new Server(httpServer, {
     cors: {
-      origin: dev ? "http://localhost:3000" : process.env.NEXT_PUBLIC_APP_URL || "https://your-app.vercel.app",
+      origin: dev ? "http://localhost:3004" : process.env.NEXT_PUBLIC_APP_URL || "https://your-app.vercel.app",
       methods: ["GET", "POST"]
     },
     allowEIO3: true,
-    transports: ['polling', 'websocket']
+    transports: ['polling', 'websocket'],
+    path: '/api/socket'
   });
 
   io.on('connection', (socket) => {
@@ -295,51 +306,100 @@ app.prepare().then(() => {
 
     socket.on('join-room', (data) => {
       const { roomId, playerName } = data;
+      console.log(`🎯 Player ${playerName} joining room ${roomId}`);
       socket.join(roomId);
 
       if (!gameRooms.has(roomId)) {
         gameRooms.set(roomId, new BlackjackGame(roomId));
+        console.log(`🆕 Created new game room: ${roomId}`);
       }
 
       const game = gameRooms.get(roomId);
       game.addPlayer(socket.id, playerName);
+      console.log(`✅ Player ${playerName} added to room ${roomId}`);
 
       io.to(roomId).emit('game-update', game.getGameState());
+      console.log(`📤 Game state sent to room ${roomId}`);
     });
 
     socket.on('start-game', (roomId) => {
+      console.log(`🎰 Starting game in room ${roomId}`);
+      console.log(`Current players in room:`, Array.from(gameRooms.get(roomId)?.players.keys() || []));
       const game = gameRooms.get(roomId);
       if (game) {
         game.startGame();
+        console.log(`Game started. Current player: ${game.currentPlayer}`);
+        console.log(`Player statuses:`, Array.from(game.players.values()).map(p => ({ name: p.name, status: p.status })));
         io.to(roomId).emit('game-update', game.getGameState());
+        console.log(`📤 Game started in room ${roomId}`);
+      } else {
+        console.log(`❌ Game not found for room ${roomId}`);
       }
     });
 
     socket.on('hit', (roomId) => {
+      console.log(`🎯 Player hit in room ${roomId}`);
       const game = gameRooms.get(roomId);
       if (game && game.currentPlayer === socket.id) {
         game.hit(socket.id);
         io.to(roomId).emit('game-update', game.getGameState());
+        console.log(`📤 Hit processed in room ${roomId}`);
+      } else {
+        console.log(`❌ Hit failed - not current player or game not found`);
       }
     });
 
     socket.on('stand', (roomId) => {
+      console.log(`🛑 Stand event received from ${socket.id} in room ${roomId}`);
       const game = gameRooms.get(roomId);
       if (game && game.currentPlayer === socket.id) {
+        console.log(`✅ Processing stand for player ${socket.id}`);
         game.stand(socket.id);
         io.to(roomId).emit('game-update', game.getGameState());
+        console.log(`📤 Stand processed in room ${roomId}`);
+      } else {
+        console.log(`❌ Stand failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
       }
     });
 
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
       for (const [roomId, game] of gameRooms) {
+        const playerWasCurrent = game.currentPlayer === socket.id;
         game.players.delete(socket.id);
+
         if (game.players.size === 0) {
+          console.log(`🗑️ Deleting empty room: ${roomId}`);
           gameRooms.delete(roomId);
         } else {
+          // Eğer disconnect olan oyuncu sıradaysa, sıradaki oyuncuya geç
+          if (playerWasCurrent && game.gameState === 'playing') {
+            const playerIds = Array.from(game.players.keys());
+            if (playerIds.length > 0) {
+              game.currentPlayer = playerIds[0];
+              console.log(`🔄 Current player changed to: ${game.currentPlayer}`);
+            }
+          }
+
+          console.log(`📤 Sending game update after disconnect in room: ${roomId}`);
           io.to(roomId).emit('game-update', game.getGameState());
         }
+      }
+    });
+
+    // Reset room event
+    socket.on('reset-room', (roomId) => {
+      console.log(`🔄 Reset room requested for: ${roomId} by ${socket.id}`);
+      const game = gameRooms.get(roomId);
+      if (game) {
+        // Yeni oyun oluştur
+        const newGame = new BlackjackGame(roomId);
+        gameRooms.set(roomId, newGame);
+
+        console.log(`✅ Room ${roomId} reset successfully`);
+        io.to(roomId).emit('game-update', newGame.getGameState());
+      } else {
+        console.log(`❌ Room ${roomId} not found for reset`);
       }
     });
   });
