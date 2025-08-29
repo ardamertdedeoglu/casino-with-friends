@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSocket } from '../lib/useSocket';
+import { useParams } from 'next/navigation';
+import { usePollingGame } from '../lib/usePollingGame';
 
 interface Card {
   suit: string;
@@ -35,48 +36,43 @@ interface GameState {
 }
 
 export default function BlackjackGame() {
-  const { socket, isConnected } = useSocket();
-  const [roomId, setRoomId] = useState('');
+  const params = useParams();
+  const roomId = params.roomId as string;
   const [playerName, setPlayerName] = useState('');
-  const [gameState, setGameState] = useState<GameState | null>(null);
   const [joined, setJoined] = useState(false);
+  const [playerId, setPlayerId] = useState('');
+  const { gameState, joinGame, makeMove, isLoading } = usePollingGame(roomId, playerName);
 
-  useEffect(() => {
-    if (socket) {
-      socket.on('game-update', (newGameState: GameState) => {
-        setGameState(newGameState);
-      });
-    }
-
-    return () => {
-      if (socket) {
-        socket.off('game-update');
-      }
-    };
-  }, [socket]);
-
-  const joinRoom = () => {
-    if (socket && roomId && playerName) {
-      socket.emit('join-room', { roomId, playerName });
+  const joinRoom = async () => {
+    if (roomId && playerName) {
+      const id = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setPlayerId(id);
+      await joinGame(id, playerName);
       setJoined(true);
     }
   };
 
-  const startGame = () => {
-    if (socket && roomId) {
-      socket.emit('start-game', roomId);
+  const startGame = async () => {
+    if (roomId) {
+      await makeMove('start');
     }
   };
 
-  const hit = () => {
-    if (socket && roomId) {
-      socket.emit('hit', roomId);
+  const hit = async () => {
+    if (roomId && playerId) {
+      await makeMove('hit', playerId);
     }
   };
 
-  const stand = () => {
-    if (socket && roomId) {
-      socket.emit('stand', roomId);
+  const stand = async () => {
+    if (roomId && playerId) {
+      await makeMove('stand', playerId);
+    }
+  };
+
+  const restartGame = async () => {
+    if (roomId) {
+      await makeMove('restart');
     }
   };
 
@@ -132,18 +128,9 @@ export default function BlackjackGame() {
           <div className="text-center mb-8">
             <h1 className="text-5xl font-bold text-gray-900 mb-3 drop-shadow-lg">🎰 Blackjack</h1>
             <p className="text-gray-700 text-lg font-medium">Arkadaşlarınla oyna ve kazan!</p>
+            <p className="text-gray-600 text-sm mt-2">Oda: <span className="font-bold text-green-700">{roomId}</span></p>
           </div>
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-gray-800 mb-2">🎯 Oda ID</label>
-              <input
-                type="text"
-                placeholder="Örneğin: oyun123"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                className="w-full p-4 border-3 border-gray-400 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
-              />
-            </div>
             <div>
               <label className="block text-sm font-bold text-gray-800 mb-2">👤 İsminiz</label>
               <input
@@ -156,10 +143,10 @@ export default function BlackjackGame() {
             </div>
             <button
               onClick={joinRoom}
-              disabled={!isConnected}
+              disabled={isLoading}
               className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-500 disabled:border-gray-400"
             >
-              {isConnected ? '🎲 Odaya Katıl' : '🔄 Bağlanıyor...'}
+              {isLoading ? '🔄 Katılıyor...' : '🎲 Oyuna Katıl'}
             </button>
           </div>
         </div>
@@ -179,8 +166,8 @@ export default function BlackjackGame() {
     );
   }
 
-  const currentPlayerData = gameState.players.find(p => p.id === socket?.id);
-  const isMyTurn = gameState.currentPlayer === socket?.id;
+  const currentPlayerData = gameState.players.find(p => p.id === playerId);
+  const isMyTurn = gameState.currentPlayer === playerId;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
@@ -236,7 +223,7 @@ export default function BlackjackGame() {
             let resultIcon = '';
             let resultText = '';
 
-            if (gameState.gameState === 'finished' && gameState.results) {
+            if (gameState.gameState === 'finished' as string && gameState.results) {
               const isWinner = gameState.results.winners.some(w => w.id === player.id);
               const isLoser = gameState.results.losers.some(l => l.id === player.id);
               const isTie = gameState.results.ties.some(t => t.id === player.id);
@@ -273,16 +260,16 @@ export default function BlackjackGame() {
 
             return (
               <div key={player.id} className={`p-6 rounded-xl shadow-xl border-2 transition-all duration-300 ${
-                gameState.gameState === 'finished' && resultStyle
+                gameState.gameState === 'finished' as string && resultStyle
                   ? resultStyle
-                  : isMyTurn && player.id === socket?.id
+                  : isMyTurn && player.id === playerId
                     ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
                     : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
               }`}>
                 <h3 className="text-xl font-bold text-gray-800 mb-3 text-center">
                   {player.name}
-                  {player.id === socket?.id && <span className="text-blue-600 ml-2">(Sen)</span>}
-                  {isMyTurn && player.id === socket?.id && <span className="text-yellow-600 ml-2">🎯</span>}
+                  {player.id === playerId && <span className="text-blue-600 ml-2">(Sen)</span>}
+                  {isMyTurn && player.id === playerId && <span className="text-yellow-600 ml-2">🎯</span>}
                   {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                 </h3>
                 <div className="flex justify-center flex-wrap mb-4 relative">
@@ -319,7 +306,7 @@ export default function BlackjackGame() {
         </div>
 
         {/* Game controls */}
-        {gameState.gameState === 'waiting' && (
+        {gameState.gameState === 'waiting' as string && (
           <div className="text-center">
             <button
               onClick={startGame}
@@ -330,7 +317,7 @@ export default function BlackjackGame() {
           </div>
         )}
 
-        {gameState.gameState === 'playing' && isMyTurn && currentPlayerData?.status === 'playing' && (
+        {gameState.gameState === 'playing' as string && isMyTurn && currentPlayerData?.status === 'playing' && (
           <div className="text-center space-x-6">
             <button
               onClick={hit}
@@ -347,7 +334,7 @@ export default function BlackjackGame() {
           </div>
         )}
 
-        {gameState.gameState === 'finished' && gameState.results && (
+        {gameState.gameState === 'finished' as string && gameState.results && (
           <>
             {/* Backdrop */}
             <div className="fixed inset-0 casino-pattern bg-gradient-to-br from-green-900 via-green-800 to-black bg-opacity-80 animate-backdrop-fade-in z-40"></div>
@@ -469,20 +456,23 @@ export default function BlackjackGame() {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <button
-                    onClick={startGame}
-                    className="bg-gradient-to-r from-green-600 to-green-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-green-700 hover:to-green-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-green-500 flex items-center justify-center"
-                  >
-                    <span className="text-2xl mr-3">🔄</span>
-                    YENİDEN OYNA
-                  </button>
-                  <button
-                    onClick={() => window.location.reload()}
+                  {gameState.gameState === 'finished' as string && (
+                    <button
+                      onClick={restartGame}
+                      disabled={isLoading}
+                      className="bg-gradient-to-r from-green-600 to-green-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-green-500 flex items-center justify-center"
+                    >
+                      <span className="text-2xl mr-3">🔄</span>
+                      {isLoading ? 'Yenileniyor...' : 'YENİDEN OYNA'}
+                    </button>
+                  )}
+                  <Link
+                    href="/"
                     className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-blue-500 flex items-center justify-center"
                   >
-                    <span className="text-2xl mr-3">🆕</span>
-                    YENİ ODA
-                  </button>
+                    <span className="text-2xl mr-3">⬅️</span>
+                    ANA MENÜ
+                  </Link>
                 </div>
               </div>
             </div>

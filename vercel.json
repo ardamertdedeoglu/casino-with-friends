@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "server.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/socket.io/(.*)",
+      "destination": "/server.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/$1"
+    }
+  ]
+}

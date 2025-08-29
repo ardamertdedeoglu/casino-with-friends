@@ -1,28 +1,50 @@
-const { createServer } = require('http');
-const { parse } = require('url');
-const next = require('next');
-const { Server } = require('socket.io');
+import { NextRequest, NextResponse } from 'next/server';
 
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
-const port = process.env.PORT || 3000;
-
-// Initialize Next.js
-const app = next({ dev, hostname, port });
-const handle = app.getRequestHandler();
-
-// Game rooms storage
+// In-memory game storage (production'da Redis kullanın)
 const gameRooms = new Map();
+
+// Types
+interface Card {
+  suit: string;
+  value: string;
+}
+
+interface Player {
+  id: string;
+  name: string;
+  hand: Card[];
+  score: number;
+  bet: number;
+  status: string;
+  isBlackjack: boolean;
+}
+
+interface GameResult {
+  dealerBusted: boolean;
+  dealerBlackjack: boolean;
+  winners: Array<{ id: string; name: string; reason: string }>;
+  losers: Array<{ id: string; name: string; reason: string }>;
+  ties: Array<{ id: string; name: string; reason: string }>;
+}
 
 // Blackjack game logic
 class BlackjackGame {
-  constructor(roomId) {
+  roomId: string;
+  players: Map<string, Player>;
+  deck: Card[];
+  gameState: string;
+  currentPlayer: string | null;
+  dealer: { hand: Card[]; score: number; hiddenCard: boolean; isBlackjack?: boolean };
+  results: GameResult | null;
+
+  constructor(roomId: string) {
     this.roomId = roomId;
     this.players = new Map();
     this.deck = this.createDeck();
     this.gameState = 'waiting';
     this.currentPlayer = null;
     this.dealer = { hand: [], score: 0, hiddenCard: true };
+    this.results = null;
   }
 
   createDeck() {
@@ -37,7 +59,7 @@ class BlackjackGame {
     return this.shuffle(deck);
   }
 
-  shuffle(deck) {
+  shuffle(deck: Card[]) {
     for (let i = deck.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -45,7 +67,7 @@ class BlackjackGame {
     return deck;
   }
 
-  calculateScore(hand) {
+  calculateScore(hand: Card[]) {
     let score = 0;
     let aces = 0;
     let isBlackjack = false;
@@ -74,11 +96,15 @@ class BlackjackGame {
     return { score, isBlackjack };
   }
 
-  dealCard() {
-    return this.deck.pop();
+  dealCard(): Card {
+    const card = this.deck.pop();
+    if (!card) {
+      throw new Error('Deck is empty');
+    }
+    return card;
   }
 
-  addPlayer(playerId, name) {
+  addPlayer(playerId: string, name: string) {
     this.players.set(playerId, {
       id: playerId,
       name,
@@ -123,7 +149,7 @@ class BlackjackGame {
     this.currentPlayer = Array.from(this.players.keys())[0];
   }
 
-  hit(playerId) {
+  hit(playerId: string) {
     const player = this.players.get(playerId);
     if (player && player.status === 'playing' && !player.isBlackjack) {
       player.hand.push(this.dealCard());
@@ -138,7 +164,7 @@ class BlackjackGame {
     }
   }
 
-  stand(playerId) {
+  stand(playerId: string) {
     const player = this.players.get(playerId);
     if (player) {
       player.status = 'stood';
@@ -148,21 +174,23 @@ class BlackjackGame {
 
   nextPlayer() {
     const playerIds = Array.from(this.players.keys());
-    const currentIndex = playerIds.indexOf(this.currentPlayer);
-    const nextIndex = (currentIndex + 1) % playerIds.length;
+    if (this.currentPlayer) {
+      const currentIndex = playerIds.indexOf(this.currentPlayer);
+      const nextIndex = (currentIndex + 1) % playerIds.length;
 
-    let allFinished = true;
-    for (const player of this.players.values()) {
-      if (player.status === 'playing') {
-        allFinished = false;
-        break;
+      let allFinished = true;
+      for (const player of this.players.values()) {
+        if (player.status === 'playing') {
+          allFinished = false;
+          break;
+        }
       }
-    }
 
-    if (allFinished) {
-      this.dealerTurn();
-    } else {
-      this.currentPlayer = playerIds[nextIndex];
+      if (allFinished) {
+        this.dealerTurn();
+      } else {
+        this.currentPlayer = playerIds[nextIndex];
+      }
     }
   }
 
@@ -187,9 +215,9 @@ class BlackjackGame {
   }
 
   calculateResults() {
-    const results = {
+    const results: GameResult = {
       dealerBusted: this.dealer.score > 21,
-      dealerBlackjack: this.dealer.isBlackjack,
+      dealerBlackjack: this.dealer.isBlackjack || false,
       winners: [],
       losers: [],
       ties: []
@@ -270,82 +298,84 @@ class BlackjackGame {
       dealer: this.dealer,
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
-      results: this.results || null
+      results: this.results
     };
   }
 }
 
-app.prepare().then(() => {
-  const httpServer = createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  });
+// Ana game route - GET: oyun durumunu al, POST: yeni oyun oluştur
+export async function GET(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
+  const { roomId } = await params;
 
-  const io = new Server(httpServer, {
-    cors: {
-      origin: dev ? "http://localhost:3000" : process.env.NEXT_PUBLIC_APP_URL || "https://your-app.vercel.app",
-      methods: ["GET", "POST"]
-    },
-    allowEIO3: true,
-    transports: ['polling', 'websocket']
-  });
+  if (!roomId) {
+    return NextResponse.json({ error: 'Room ID required' }, { status: 400 });
+  }
 
-  io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+  let game = gameRooms.get(roomId);
 
-    socket.on('join-room', (data) => {
-      const { roomId, playerName } = data;
-      socket.join(roomId);
+  if (!game) {
+    // Yeni oyun oluştur
+    game = new BlackjackGame(roomId);
+    gameRooms.set(roomId, game);
+  }
 
-      if (!gameRooms.has(roomId)) {
-        gameRooms.set(roomId, new BlackjackGame(roomId));
-      }
+  return NextResponse.json(game.getGameState());
+}
 
-      const game = gameRooms.get(roomId);
-      game.addPlayer(socket.id, playerName);
+export async function POST(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
+  const { roomId } = await params;
 
-      io.to(roomId).emit('game-update', game.getGameState());
-    });
+  if (!roomId) {
+    return NextResponse.json({ error: 'Room ID required' }, { status: 400 });
+  }
 
-    socket.on('start-game', (roomId) => {
-      const game = gameRooms.get(roomId);
-      if (game) {
-        game.startGame();
-        io.to(roomId).emit('game-update', game.getGameState());
-      }
-    });
+  const body = await request.json();
+  const { action, playerId, playerName } = body;
 
-    socket.on('hit', (roomId) => {
-      const game = gameRooms.get(roomId);
-      if (game && game.currentPlayer === socket.id) {
-        game.hit(socket.id);
-        io.to(roomId).emit('game-update', game.getGameState());
-      }
-    });
+  let game = gameRooms.get(roomId);
 
-    socket.on('stand', (roomId) => {
-      const game = gameRooms.get(roomId);
-      if (game && game.currentPlayer === socket.id) {
-        game.stand(socket.id);
-        io.to(roomId).emit('game-update', game.getGameState());
-      }
-    });
+  if (!game) {
+    game = new BlackjackGame(roomId);
+    gameRooms.set(roomId, game);
+  }
 
-    socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
-      for (const [roomId, game] of gameRooms) {
-        game.players.delete(socket.id);
-        if (game.players.size === 0) {
-          gameRooms.delete(roomId);
-        } else {
-          io.to(roomId).emit('game-update', game.getGameState());
+  try {
+    switch (action) {
+      case 'join':
+        if (playerId && playerName) {
+          game.addPlayer(playerId, playerName);
         }
-      }
-    });
-  });
+        break;
 
-  httpServer.listen(port, (err) => {
-    if (err) throw err;
-    console.log(`> Ready on http://${hostname}:${port}`);
-  });
-});
+      case 'start':
+        game.startGame();
+        break;
+
+      case 'hit':
+        if (playerId) {
+          game.hit(playerId);
+        }
+        break;
+
+      case 'stand':
+        if (playerId) {
+          game.stand(playerId);
+        }
+        break;
+
+      case 'restart':
+        // Yeni oyun oluştur
+        game = new BlackjackGame(roomId);
+        gameRooms.set(roomId, game);
+        break;
+
+      default:
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    return NextResponse.json(game.getGameState());
+  } catch (error) {
+    console.error('Game action error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

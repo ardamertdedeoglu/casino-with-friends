@@ -14,7 +14,10 @@ export const useSocket = () => {
         : 'http://localhost:3000';
 
       socket = io(socketUrl, {
-        transports: ['websocket', 'polling']
+        transports: ['polling', 'websocket'],
+        upgrade: false,
+        rememberUpgrade: false,
+        timeout: 20000
       });
     }
 

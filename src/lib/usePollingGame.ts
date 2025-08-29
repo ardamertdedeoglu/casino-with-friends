@@ -1,0 +1,146 @@
+import { useState, useEffect, useCallback } from 'react';
+
+interface Card {
+  suit: string;
+  value: string;
+}
+
+interface Player {
+  id: string;
+  name: string;
+  hand: Card[];
+  score: number;
+  bet: number;
+  status: string;
+  isBlackjack?: boolean;
+}
+
+interface GameState {
+  roomId: string;
+  players: Player[];
+  dealer: { hand: Card[]; score: number; hiddenCard: boolean; isBlackjack?: boolean };
+  gameState: string;
+  currentPlayer: string;
+  results?: {
+    dealerBusted: boolean;
+    dealerBlackjack?: boolean;
+    winners: Array<{ id: string; name: string; reason: string }>;
+    losers: Array<{ id: string; name: string; reason: string }>;
+    ties: Array<{ id: string; name: string; reason: string }>;
+  } | null;
+}
+
+export const usePollingGame = (roomId: string, playerName: string) => {
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Oyun durumunu çek
+  const fetchGameState = useCallback(async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setGameState(data);
+        setIsConnected(true);
+      } else if (response.status === 404) {
+        // Oda bulunamadı, yeni oda oluştur
+        setGameState(null);
+        setIsConnected(false);
+      }
+    } catch (error) {
+      console.error('Game state fetch error:', error);
+      setIsConnected(false);
+    }
+  }, [roomId]);
+
+  // Oyuna katıl
+  const joinGame = useCallback(async (playerId: string, name: string) => {
+    if (!roomId) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/game/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'join', playerId, playerName: name })
+      });
+
+      if (response.ok) {
+        await fetchGameState();
+      } else {
+        console.error('Failed to join game');
+      }
+    } catch (error) {
+      console.error('Join game error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [roomId, fetchGameState]);
+
+  // Hamle yap
+  const makeMove = useCallback(async (action: string, playerId?: string) => {
+    if (!roomId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, playerId, playerName })
+      });
+
+      if (response.ok) {
+        await fetchGameState();
+      } else {
+        console.error('Failed to make move');
+      }
+    } catch (error) {
+      console.error('Move error:', error);
+    }
+  }, [roomId, playerName, fetchGameState]);
+
+  // Oyunu başlat
+  const startGame = useCallback(async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerName })
+      });
+
+      if (response.ok) {
+        await fetchGameState();
+      } else {
+        console.error('Failed to start game');
+      }
+    } catch (error) {
+      console.error('Start game error:', error);
+    }
+  }, [roomId, playerName, fetchGameState]);
+
+  // Periyodik olarak oyun durumunu güncelle
+  useEffect(() => {
+    if (roomId) {
+      // İlk yükleme
+      fetchGameState();
+
+      // Periyodik güncelleme
+      const interval = setInterval(fetchGameState, 2000); // Her 2 saniyede bir güncelle
+      return () => clearInterval(interval);
+    }
+  }, [roomId, fetchGameState]);
+
+  return {
+    gameState,
+    isConnected,
+    isLoading,
+    joinGame,
+    makeMove,
+    startGame,
+    fetchGameState
+  };
+};
