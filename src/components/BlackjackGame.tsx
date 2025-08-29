@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useSocket } from '../lib/useSocket';
 
 interface Card {
@@ -118,13 +119,13 @@ export default function BlackjackGame() {
       <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center p-4">
         {/* Back to Menu Button */}
         <div className="absolute top-4 left-4">
-          <a
+          <Link
             href="/"
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-full font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center"
           >
             <span className="text-xl mr-2">⬅️</span>
             ANA MENÜ
-          </a>
+          </Link>
         </div>
 
         <div className="bg-gradient-to-br from-yellow-50 via-white to-yellow-100 p-8 rounded-2xl shadow-2xl border-4 border-yellow-400 max-w-lg w-full backdrop-blur-sm">
@@ -186,13 +187,13 @@ export default function BlackjackGame() {
       <div className="max-w-6xl mx-auto">
         {/* Back to Menu Button */}
         <div className="mb-4">
-          <a
+          <Link
             href="/"
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
           >
             <span className="text-lg mr-2">⬅️</span>
             ANA MENÜ
-          </a>
+          </Link>
         </div>
 
         {/* Header */}

@@ -23,7 +23,7 @@ export default function Home() {
               <div className="text-center">
                 <div className="text-8xl mb-4 group-hover:animate-bounce">🃏</div>
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">BLACKJACK</h2>
-                <p className="text-gray-600 mb-4">21'e ulaşmaya çalış!</p>
+                <p className="text-gray-600 mb-4">21&apos;e ulaşmaya çalış!</p>
                 <div className="bg-green-600 text-white px-6 py-3 rounded-full font-bold text-lg hover:bg-green-700 transition-colors">
                   OYNA
                 </div>
