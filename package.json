@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "next dev --turbopack",
     "dev:next": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
@@ -13,8 +13,6 @@
     "next": "15.5.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
     "@supabase/supabase-js": "^2.56.1",
     "uuid": "^11.1.0"
   },

@@ -5,17 +5,17 @@ A multiplayer casino game website built with Next.js, featuring Blackjack and mo
 ## Features
 
 - **Multiplayer Blackjack**: Play blackjack with friends in real-time
-- **Real-time Communication**: Socket.io for instant game updates
+- **HTTP Polling**: Efficient real-time updates without WebSocket connections
 - **Modern UI**: Built with Next.js and Tailwind CSS
-- **Scalable Backend**: Express.js server with Socket.io
+- **Serverless Backend**: Next.js API routes for Vercel deployment
 - **Database Ready**: Supabase integration for user management and game persistence
 
 ## Tech Stack
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
-- **Backend**: Express.js, Socket.io
+- **Backend**: Next.js API Routes (Serverless)
 - **Database**: Supabase (optional)
-- **Real-time**: Socket.io
+- **Real-time**: HTTP Polling (Vercel-compatible)
 
 ## Getting Started
 
@@ -88,15 +88,17 @@ npm run backend
 ```
 ├── src/
 │   ├── app/              # Next.js app directory
+│   │   ├── api/          # API routes
+│   │   │   └── game/     # Game API endpoints
+│   │   ├── blackjack/    # Blackjack game page
+│   │   └── page.tsx      # Main menu
 │   ├── components/       # React components
 │   │   └── BlackjackGame.tsx
 │   └── lib/              # Utilities and hooks
 │       ├── supabase.ts
-│       └── useSocket.ts
-├── backend/              # Express.js server
-│   ├── server.js
-│   └── package.json
-└── public/               # Static assets
+│       └── usePollingGame.ts
+├── public/               # Static assets
+└── vercel.json           # Vercel deployment config
 ```
 
 ## Future Games
