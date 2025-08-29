@@ -126,15 +126,21 @@ export default function BlackjackGame() {
 
   const hit = async () => {
     if (roomId && socketId) {
-      console.log('🎯 Hit button clicked, socketId:', socketId);
+      console.log('🎯 Hit button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
+      console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
       await makeMove('hit', socketId);
+    } else {
+      console.log('❌ Hit failed - roomId:', roomId, 'socketId:', socketId);
     }
   };
 
   const stand = async () => {
     if (roomId && socketId) {
-      console.log('🛑 Stand button clicked, socketId:', socketId);
+      console.log('🛑 Stand button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
+      console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
       await makeMove('stand', socketId);
+    } else {
+      console.log('❌ Stand failed - roomId:', roomId, 'socketId:', socketId);
     }
   };
 

@@ -412,25 +412,30 @@ app.prepare().then(() => {
     });
 
     socket.on('hit', (roomId) => {
-      console.log(`🎯 Player hit in room ${roomId}`);
+      console.log(`🎯 Player hit in room ${roomId}, socket ID: ${socket.id}`);
       const game = gameRooms.get(roomId);
+      console.log(`Current player in game: ${game?.currentPlayer}`);
+      console.log(`Is it this player's turn? ${game?.currentPlayer === socket.id}`);
       if (game && game.currentPlayer === socket.id) {
+        console.log(`✅ Processing hit for player ${socket.id}`);
         game.hit(socket.id);
         io.to(roomId).emit('game-update', game.getGameState());
-        console.log(`📤 Hit processed in room ${roomId}`);
+        console.log(`📤 Hit processed in room ${roomId}, new current player: ${game.currentPlayer}`);
       } else {
-        console.log(`❌ Hit failed - not current player or game not found`);
+        console.log(`❌ Hit failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
       }
     });
 
     socket.on('stand', (roomId) => {
       console.log(`🛑 Stand event received from ${socket.id} in room ${roomId}`);
       const game = gameRooms.get(roomId);
+      console.log(`Current player in game: ${game?.currentPlayer}`);
+      console.log(`Is it this player's turn? ${game?.currentPlayer === socket.id}`);
       if (game && game.currentPlayer === socket.id) {
         console.log(`✅ Processing stand for player ${socket.id}`);
         game.stand(socket.id);
         io.to(roomId).emit('game-update', game.getGameState());
-        console.log(`📤 Stand processed in room ${roomId}`);
+        console.log(`📤 Stand processed in room ${roomId}, new current player: ${game.currentPlayer}`);
       } else {
         console.log(`❌ Stand failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
       }
