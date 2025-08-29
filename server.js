@@ -238,7 +238,7 @@ class BlackjackGame {
       // Game state'i client'lara gönder
       this.io.to(this.roomId).emit('game-update', this.getGameState());
       console.log('📤 Dealer turn completed and results sent to room:', this.roomId);
-    }, 1500); // 1.5 saniye bekle ki dealer hamleleri görünsün
+    }, 3000); // 3 saniye bekle ki dealer hamleleri ve sonuçlar görünsün
   }
 
   calculateResults() {
