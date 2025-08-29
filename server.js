@@ -177,6 +177,10 @@ class BlackjackGame {
       this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
       console.log('🎩 Dealer reveals cards:', this.dealer.hand, 'Score:', this.dealer.score);
 
+      // Dealer kartları açıldı, güncel durumu gönder
+      io.to(this.roomId).emit('game-update', this.getGameState());
+      console.log('📤 Dealer cards revealed to room:', this.roomId);
+
       // If dealer doesn't have blackjack, play according to rules
       if (!this.dealer.isBlackjack) {
         let hitCount = 0;
@@ -188,6 +192,10 @@ class BlackjackGame {
           this.dealer.isBlackjack = newScoreResult.isBlackjack;
           hitCount++;
           console.log(`🎩 Dealer hit ${hitCount}:`, this.dealer.hand[this.dealer.hand.length - 1], 'New score:', this.dealer.score);
+
+          // Dealer kart çekti, güncel durumu gönder
+          io.to(this.roomId).emit('game-update', this.getGameState());
+          console.log(`📤 Dealer hit ${hitCount} sent to room:`, this.roomId);
         }
         console.log('🎩 Dealer stands with score:', this.dealer.score);
       }
@@ -197,6 +205,10 @@ class BlackjackGame {
       this.calculateResults();
       this.gameState = 'finished';
       console.log('🎩 Game finished with results:', this.results);
+
+      // Game state'i client'lara gönder
+      io.to(this.roomId).emit('game-update', this.getGameState());
+      console.log('📤 Dealer turn completed and results sent to room:', this.roomId);
     }, 1500); // 1.5 saniye bekle ki dealer hamleleri görünsün
   }
 
