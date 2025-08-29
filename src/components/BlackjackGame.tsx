@@ -41,29 +41,61 @@ export default function BlackjackGame() {
   const [playerName, setPlayerName] = useState('');
   const [joined, setJoined] = useState(false);
   const [playerId, setPlayerId] = useState('');
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, isLoading } = usePollingGame(roomId, playerName);
+  const [showNameChangeModal, setShowNameChangeModal] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, fetchGameState, isLoading } = usePollingGame(roomId, playerName);
 
-  // Component unmount olduğunda player'ı odadan çıkar
-  useEffect(() => {
-    return () => {
-      if (playerId && roomId) {
-        leaveGame(playerId);
-      }
-    };
-  }, [playerId, roomId, leaveGame]);
+  // Component unmount olduğunda player'ı odadan çıkar - kaldırıldı çünkü sorun yaratıyor
 
   const handleLeaveGame = async () => {
     if (playerId && roomId) {
       await leaveGame(playerId);
+      setJoined(false);
+      setPlayerId('');
+    }
+  };
+
+  const handleResetRoom = async () => {
+    if (roomId && confirm('Bu oda sıfırlanacak ve tüm oyuncular çıkarılacak. Emin misiniz?')) {
+      await resetRoom();
+      setJoined(false);
+      setPlayerId('');
+    }
+  };
+
+  const handleChangeName = async () => {
+    const trimmedName = newPlayerName.trim();
+    if (roomId && playerId && trimmedName && trimmedName.length >= 2 && trimmedName.length <= 15) {
+      try {
+        await changeName(playerId, trimmedName);
+        setShowNameChangeModal(false);
+        setNewPlayerName('');
+      } catch (error) {
+        console.error('Change name error:', error);
+        alert('İsim değiştirme sırasında hata oluştu!');
+      }
+    } else if (!trimmedName) {
+      alert('Lütfen bir isim girin!');
+    } else if (trimmedName.length < 2) {
+      alert('İsim en az 2 karakter olmalıdır!');
+    } else if (trimmedName.length > 15) {
+      alert('İsim en fazla 15 karakter olabilir!');
     }
   };
 
   const joinRoom = async () => {
-    if (roomId && playerName) {
+    const trimmedName = playerName.trim();
+    if (roomId && trimmedName && trimmedName.length >= 2 && trimmedName.length <= 15) {
       const id = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setPlayerId(id);
       await joinGame(id);
       setJoined(true);
+    } else if (!trimmedName) {
+      alert('Lütfen bir isim girin!');
+    } else if (trimmedName.length < 2) {
+      alert('İsim en az 2 karakter olmalıdır!');
+    } else if (trimmedName.length > 15) {
+      alert('İsim en fazla 15 karakter olabilir!');
     }
   };
 
@@ -117,7 +149,7 @@ export default function BlackjackGame() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center p-4">
         {/* Back to Menu Button */}
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 flex gap-3">
           <Link
             href="/"
             onClick={handleLeaveGame}
@@ -126,6 +158,13 @@ export default function BlackjackGame() {
             <span className="text-xl mr-2">⬅️</span>
             ANA MENÜ
           </Link>
+          <button
+            onClick={handleResetRoom}
+            className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-3 rounded-full font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center"
+          >
+            <span className="text-lg mr-2">🔄</span>
+            SIFIRLA
+          </button>
         </div>
 
         <div className="bg-gradient-to-br from-yellow-50 via-white to-yellow-100 p-8 rounded-2xl shadow-2xl border-4 border-yellow-400 max-w-lg w-full backdrop-blur-sm">
@@ -139,15 +178,17 @@ export default function BlackjackGame() {
               <label className="block text-sm font-bold text-gray-800 mb-2">👤 İsminiz</label>
               <input
                 type="text"
-                placeholder="Oyuncu adınızı girin"
+                placeholder="Oyuncu adınızı girin (max 15 karakter)"
                 value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
+                onChange={(e) => setPlayerName(e.target.value.slice(0, 15))}
+                maxLength={15}
                 className="w-full p-4 border-3 border-gray-400 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
               />
+              <p className="text-xs text-gray-500 mt-1">{playerName.length}/15 karakter</p>
             </div>
             <button
               onClick={joinRoom}
-              disabled={isLoading}
+              disabled={isLoading || !playerName.trim() || playerName.trim().length < 2 || playerName.length > 15}
               className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-500 disabled:border-gray-400"
             >
               {isLoading ? '🔄 Katılıyor...' : '🎲 Oyuna Katıl'}
@@ -177,7 +218,7 @@ export default function BlackjackGame() {
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
       <div className="max-w-6xl mx-auto">
         {/* Back to Menu Button */}
-        <div className="mb-4">
+        <div className="mb-4 flex gap-3">
           <Link
             href="/"
             onClick={handleLeaveGame}
@@ -186,6 +227,13 @@ export default function BlackjackGame() {
             <span className="text-lg mr-2">⬅️</span>
             ANA MENÜ
           </Link>
+          <button
+            onClick={handleResetRoom}
+            className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
+          >
+            <span className="text-lg mr-2">🔄</span>
+            SIFIRLA
+          </button>
         </div>
 
         {/* Header */}
@@ -280,6 +328,19 @@ export default function BlackjackGame() {
                   {isMyTurn && player.id === playerId && <span className="text-yellow-600 ml-2">🎯</span>}
                   {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                 </h3>
+                {player.id === playerId && (
+                  <div className="text-center mb-3">
+                    <button
+                      onClick={() => {
+                        setShowNameChangeModal(true);
+                        setNewPlayerName(player.name);
+                      }}
+                      className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1 rounded-lg font-bold text-sm hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
+                    >
+                      ✏️ İsim Değiştir
+                    </button>
+                  </div>
+                )}
                 <div className="flex justify-center flex-wrap mb-4 relative">
                   {player.hand.map((card, index) => (
                     <div key={index} className="relative">
@@ -345,6 +406,47 @@ export default function BlackjackGame() {
         {gameState.gameState === 'playing' as string && isMyTurn && currentPlayerData?.isBlackjack && (
           <div className="text-center">
             <p className="text-green-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! Otomatik olarak bekleniyor...</p>
+          </div>
+        )}
+
+        {/* Name Change Modal */}
+        {showNameChangeModal && (
+          <div className="fixed inset-0 flex items-center justify-center z-40 p-4 pointer-events-none">
+            <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 bg-opacity-95 backdrop-blur-sm rounded-2xl p-8 max-w-md w-full shadow-2xl border-4 border-purple-400 pointer-events-auto animate-modal-appear">
+              <h3 className="text-2xl font-bold text-white mb-6 text-center drop-shadow-lg">✏️ İsim Değiştir</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-white mb-2 drop-shadow">Yeni İsminiz</label>
+                  <input
+                    type="text"
+                    placeholder="Yeni adınızı girin (max 15 karakter)"
+                    value={newPlayerName}
+                    onChange={(e) => setNewPlayerName(e.target.value.slice(0, 15))}
+                    maxLength={15}
+                    className="w-full p-4 border-3 border-purple-300 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-purple-500 focus:ring-4 focus:ring-purple-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
+                  />
+                  <p className="text-xs text-purple-200 mt-1 drop-shadow">{newPlayerName.length}/15 karakter</p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleChangeName}
+                    disabled={!newPlayerName.trim() || newPlayerName.trim().length < 2 || newPlayerName.length > 15}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl font-bold text-lg hover:from-green-600 hover:to-green-700 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-400"
+                  >
+                    ✅ Değiştir
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowNameChangeModal(false);
+                      setNewPlayerName('');
+                    }}
+                    className="flex-1 bg-gradient-to-r from-gray-600 to-gray-700 text-white p-4 rounded-xl font-bold text-lg hover:from-gray-700 hover:to-gray-800 transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-gray-500"
+                  >
+                    ❌ İptal
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -487,6 +589,13 @@ export default function BlackjackGame() {
                     <span className="text-2xl mr-3">⬅️</span>
                     ANA MENÜ
                   </Link>
+                  <button
+                    onClick={handleResetRoom}
+                    className="bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-red-700 hover:to-red-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-red-500 flex items-center justify-center"
+                  >
+                    <span className="text-2xl mr-3">🔄</span>
+                    ODAYI SIFIRLA
+                  </button>
                 </div>
               </div>
             </div>

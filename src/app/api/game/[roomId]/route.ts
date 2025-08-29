@@ -116,6 +116,18 @@ class BlackjackGame {
     });
   }
 
+  changePlayerName(playerId: string, newName: string) {
+    const player = this.players.get(playerId);
+    if (player) {
+      const trimmedName = newName.trim();
+      if (trimmedName.length >= 2 && trimmedName.length <= 15) {
+        player.name = trimmedName;
+        return true;
+      }
+    }
+    return false;
+  }
+
   startGame() {
     this.gameState = 'playing';
     this.results = null;
@@ -192,7 +204,14 @@ class BlackjackGame {
 
   nextPlayer() {
     const playerIds = Array.from(this.players.keys());
-    if (!this.currentPlayer || playerIds.length === 0) {
+    if (playerIds.length === 0) {
+      this.currentPlayer = null;
+      return;
+    }
+
+    if (!this.currentPlayer) {
+      // İlk oyuncu olarak ayarla
+      this.currentPlayer = playerIds[0];
       return;
     }
 
@@ -368,7 +387,7 @@ class BlackjackGame {
     this.dealer.hand = [];
     this.dealer.score = 0;
     this.dealer.isBlackjack = false;
-    this.dealer.hiddenCard = false;
+    this.dealer.hiddenCard = true; // Yeni oyun başladığında dealer'ın kartı gizli
     this.gameState = 'waiting';
     this.currentPlayer = null;
     this.results = null;
@@ -415,7 +434,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     switch (action) {
       case 'join':
         if (playerId && playerName) {
-          game.addPlayer(playerId, playerName);
+          const trimmedName = playerName.trim();
+          if (trimmedName.length >= 2 && trimmedName.length <= 15) {
+            game.addPlayer(playerId, trimmedName);
+          } else {
+            return NextResponse.json({ error: 'İsim 2-15 karakter arasında olmalıdır' }, { status: 400 });
+          }
+        } else {
+          return NextResponse.json({ error: 'Player ID ve isim gerekli' }, { status: 400 });
         }
         break;
 
@@ -425,31 +451,83 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       case 'hit':
         if (playerId) {
-          game.hit(playerId);
+          const player = game.players.get(playerId);
+          if (player && player.status === 'playing' && game.currentPlayer === playerId) {
+            game.hit(playerId);
+          }
         }
         break;
 
       case 'stand':
         if (playerId) {
-          game.stand(playerId);
+          const player = game.players.get(playerId);
+          if (player && player.status === 'playing' && game.currentPlayer === playerId) {
+            game.stand(playerId);
+          }
+        }
+        break;
+
+      case 'changeName':
+        if (playerId && playerName) {
+          const success = game.changePlayerName(playerId, playerName);
+          if (!success) {
+            return NextResponse.json({ error: 'İsim 2-15 karakter arasında olmalıdır' }, { status: 400 });
+          }
+        } else {
+          return NextResponse.json({ error: 'Player ID ve yeni isim gerekli' }, { status: 400 });
+        }
+        break;
+
+      case 'restart':
+        console.log('Restarting game for room:', roomId);
+        try {
+          // Mevcut oyuncuları koruyarak yeni oyun başlat
+          game.resetGame();
+          // İlk oyuncuyu current player olarak ayarla ve kart dağıt
+          if (game.players.size > 0) {
+            game.startGame();
+            console.log('Game restarted successfully, players:', game.players.size);
+          } else {
+            console.log('No players to restart game');
+          }
+        } catch (error) {
+          console.error('Error during game restart:', error);
+          return NextResponse.json({ error: 'Oyun yeniden başlatılırken hata oluştu' }, { status: 500 });
         }
         break;
 
       case 'leave':
         if (playerId) {
-          game.players.delete(playerId);
-          // Eğer hiç oyuncu kalmadıysa veya oyun başladıysa waiting'e geç
-          if (game.players.size === 0 || game.gameState === 'playing') {
-            game.gameState = 'waiting';
-            game.currentPlayer = null;
-            game.results = null;
+          const leavingPlayer = game.players.get(playerId);
+          if (leavingPlayer) {
+            game.players.delete(playerId);
+
+            // Eğer çıkan oyuncu şu anki oyuncu ise, sıradaki oyuncuya geç
+            if (game.currentPlayer === playerId) {
+              game.nextPlayer();
+            }
+
+            // Eğer hiç oyuncu kalmadıysa waiting'e geç
+            if (game.players.size === 0) {
+              game.gameState = 'waiting';
+              game.currentPlayer = null;
+              game.results = null;
+            }
           }
         }
         break;
 
-      case 'restart':
-        // Mevcut oyuncuları koruyarak yeni oyun başlat
-        game.resetGame();
+      case 'reset':
+        // Tüm oyuncuları çıkar ve oyunu sıfırla
+        game.players.clear();
+        game.gameState = 'waiting';
+        game.currentPlayer = null;
+        game.results = null;
+        game.deck = game.createDeck();
+        game.dealer.hand = [];
+        game.dealer.score = 0;
+        game.dealer.isBlackjack = false;
+        game.dealer.hiddenCard = false;
         break;
 
       default:

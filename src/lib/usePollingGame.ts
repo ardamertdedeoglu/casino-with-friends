@@ -92,7 +92,10 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       });
 
       if (response.ok) {
+        // Hamle yapıldıktan sonra hemen güncelleme al
         await fetchGameState();
+        // Kısa bir gecikme sonrası tekrar güncelleme al (diğer oyuncular için)
+        setTimeout(() => fetchGameState(), 500);
       } else {
         console.error('Failed to make move');
       }
@@ -113,12 +116,59 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       });
 
       if (response.ok) {
+        console.log('Player left successfully:', playerId);
         await fetchGameState();
+        // Kısa bir gecikme sonrası tekrar güncelleme al
+        setTimeout(() => fetchGameState(), 500);
       } else {
-        console.error('Failed to leave game');
+        console.error('Failed to leave game:', response.status);
       }
     } catch (error) {
       console.error('Leave game error:', error);
+    }
+  }, [roomId, fetchGameState]);
+
+  // Oda sıfırla
+  const resetRoom = useCallback(async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset' })
+      });
+
+      if (response.ok) {
+        console.log('Room reset successfully');
+        await fetchGameState();
+      } else {
+        console.error('Failed to reset room');
+      }
+    } catch (error) {
+      console.error('Reset room error:', error);
+    }
+  }, [roomId, fetchGameState]);
+
+  // İsim değiştir
+  const changeName = useCallback(async (playerId: string, newName: string) => {
+    if (!roomId || !playerId) return;
+
+    try {
+      const response = await fetch(`/api/game/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'changeName', playerId, playerName: newName })
+      });
+
+      if (response.ok) {
+        console.log('Name changed successfully');
+        await fetchGameState();
+      } else {
+        console.error('Failed to change name');
+      }
+    } catch (error) {
+      console.error('Change name error:', error);
     }
   }, [roomId, fetchGameState]);
 
@@ -155,9 +205,14 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       });
 
       if (response.ok) {
+        console.log('Game restarted successfully');
         await fetchGameState();
+        // Kısa bir gecikme sonrası tekrar güncelleme al
+        setTimeout(() => fetchGameState(), 500);
       } else {
-        console.error('Failed to restart game');
+        console.error('Failed to restart game:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('Error details:', errorText);
       }
     } catch (error) {
       console.error('Restart game error:', error);
@@ -170,8 +225,8 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       // İlk yükleme
       fetchGameState();
 
-      // Periyodik güncelleme
-      const interval = setInterval(fetchGameState, 2000); // Her 2 saniyede bir güncelle
+      // Periyodik güncelleme - daha sık polling
+      const interval = setInterval(fetchGameState, 1000); // Her 1 saniyede bir güncelle
       return () => clearInterval(interval);
     }
   }, [roomId, fetchGameState]);
@@ -185,6 +240,8 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     startGame,
     restartGame,
     leaveGame,
+    resetRoom,
+    changeName,
     fetchGameState
   };
 };
