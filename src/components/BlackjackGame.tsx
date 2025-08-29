@@ -15,16 +15,18 @@ interface Player {
   score: number;
   bet: number;
   status: string;
+  isBlackjack?: boolean;
 }
 
 interface GameState {
   roomId: string;
   players: Player[];
-  dealer: { hand: Card[]; score: number; hiddenCard: boolean };
+  dealer: { hand: Card[]; score: number; hiddenCard: boolean; isBlackjack?: boolean };
   gameState: string;
   currentPlayer: string;
   results?: {
     dealerBusted: boolean;
+    dealerBlackjack?: boolean;
     winners: Array<{ id: string; name: string; reason: string }>;
     losers: Array<{ id: string; name: string; reason: string }>;
     ties: Array<{ id: string; name: string; reason: string }>;
@@ -114,6 +116,17 @@ export default function BlackjackGame() {
   if (!joined) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center p-4">
+        {/* Back to Menu Button */}
+        <div className="absolute top-4 left-4">
+          <a
+            href="/"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-full font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center"
+          >
+            <span className="text-xl mr-2">⬅️</span>
+            ANA MENÜ
+          </a>
+        </div>
+
         <div className="bg-gradient-to-br from-yellow-50 via-white to-yellow-100 p-8 rounded-2xl shadow-2xl border-4 border-yellow-400 max-w-lg w-full backdrop-blur-sm">
           <div className="text-center mb-8">
             <h1 className="text-5xl font-bold text-gray-900 mb-3 drop-shadow-lg">🎰 Blackjack</h1>
@@ -171,6 +184,17 @@ export default function BlackjackGame() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
       <div className="max-w-6xl mx-auto">
+        {/* Back to Menu Button */}
+        <div className="mb-4">
+          <a
+            href="/"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
+          >
+            <span className="text-lg mr-2">⬅️</span>
+            ANA MENÜ
+          </a>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-5xl font-bold text-yellow-400 mb-2 drop-shadow-lg">🎰 BLACKJACK</h1>
@@ -183,13 +207,18 @@ export default function BlackjackGame() {
         {/* Dealer's hand */}
         <div className="bg-gradient-to-r from-red-900 to-red-800 p-6 rounded-xl mb-6 shadow-2xl border-4 border-yellow-400">
           <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KURPİYER</h2>
-          <div className="flex justify-center flex-wrap">
+          <div className="flex justify-center flex-wrap relative">
             {gameState.dealer.hand.map((card, index) => (
               <div
                 key={index}
-                className={`transition-transform duration-700 ${index === 1 && !gameState.dealer.hiddenCard ? 'animate-card-flip' : ''}`}
+                className={`transition-transform duration-700 relative ${index === 1 && !gameState.dealer.hiddenCard ? 'animate-card-flip' : ''}`}
               >
                 {index === 1 && gameState.dealer.hiddenCard ? renderCardBack() : renderCard(card)}
+                {gameState.dealer.isBlackjack && index === gameState.dealer.hand.length - 1 && !gameState.dealer.hiddenCard && (
+                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
+                    BLACKJACK!
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -214,15 +243,30 @@ export default function BlackjackGame() {
               if (isWinner) {
                 resultStyle = 'border-green-500 bg-gradient-to-br from-green-100 to-green-200 ring-4 ring-green-300';
                 resultIcon = '🏆';
-                resultText = 'Kazandın!';
+                const winnerInfo = gameState.results.winners.find(w => w.id === player.id);
+                if (winnerInfo?.reason === 'blackjack') {
+                  resultText = '🎉 BLACKJACK!';
+                } else {
+                  resultText = 'Kazandın!';
+                }
               } else if (isLoser) {
                 resultStyle = 'border-red-500 bg-gradient-to-br from-red-100 to-red-200 ring-4 ring-red-300';
                 resultIcon = '❌';
-                resultText = 'Kaybettin!';
+                const loserInfo = gameState.results.losers.find(l => l.id === player.id);
+                if (loserInfo?.reason === 'dealer_blackjack') {
+                  resultText = 'Krupiyer Blackjack!';
+                } else {
+                  resultText = 'Kaybettin!';
+                }
               } else if (isTie) {
                 resultStyle = 'border-blue-500 bg-gradient-to-br from-blue-100 to-blue-200 ring-4 ring-blue-300';
                 resultIcon = '🤝';
-                resultText = 'Berabere!';
+                const tieInfo = gameState.results.ties.find(t => t.id === player.id);
+                if (tieInfo?.reason === 'blackjack_push') {
+                  resultText = 'Blackjack Berabere!';
+                } else {
+                  resultText = 'Berabere!';
+                }
               }
             }
 
@@ -240,9 +284,16 @@ export default function BlackjackGame() {
                   {isMyTurn && player.id === socket?.id && <span className="text-yellow-600 ml-2">🎯</span>}
                   {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                 </h3>
-                <div className="flex justify-center flex-wrap mb-4">
+                <div className="flex justify-center flex-wrap mb-4 relative">
                   {player.hand.map((card, index) => (
-                    <div key={index}>{renderCard(card)}</div>
+                    <div key={index} className="relative">
+                      {renderCard(card)}
+                      {player.isBlackjack && index === player.hand.length - 1 && (
+                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
+                          BLACKJACK!
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
                 <div className="text-center space-y-1">
@@ -313,17 +364,26 @@ export default function BlackjackGame() {
                 {/* Dealer Result - Hero Section */}
                 <div className="mb-8 p-6 bg-gradient-to-r from-black via-gray-900 to-black rounded-2xl border-4 border-yellow-400 shadow-2xl">
                   <div className="text-center">
-                    <h3 className="text-3xl font-bold mb-4 text-yellow-300">🏠 KURPİYER</h3>
+                    <h3 className="text-3xl font-bold mb-4 text-yellow-300 flex items-center justify-center">
+                      🏠 KURPİYER
+                      {gameState.dealer.isBlackjack && <span className="ml-3 text-yellow-400 text-2xl animate-pulse">♠♥</span>}
+                    </h3>
                     <div className="text-7xl font-bold text-white mb-4 drop-shadow-lg">
                       {gameState.dealer.score}
                     </div>
+                    {gameState.dealer.isBlackjack && (
+                      <div className="animate-pulse mb-4">
+                        <p className="text-yellow-400 font-bold text-3xl mb-2">🎊 BLACKJACK!</p>
+                        <p className="text-yellow-200 text-lg">Krupiyer 21 yaptı!</p>
+                      </div>
+                    )}
                     {gameState.results.dealerBusted && (
                       <div className="animate-pulse">
                         <p className="text-red-400 font-bold text-2xl mb-2">💥 BATTI!</p>
                         <p className="text-yellow-200 text-lg">Tüm oyuncular kazandı!</p>
                       </div>
                     )}
-                    {!gameState.results.dealerBusted && gameState.dealer.score <= 21 && (
+                    {!gameState.results.dealerBusted && !gameState.dealer.isBlackjack && gameState.dealer.score <= 21 && (
                       <p className="text-green-400 font-bold text-xl">✅ {gameState.dealer.score} ile durdu</p>
                     )}
                   </div>
@@ -336,18 +396,25 @@ export default function BlackjackGame() {
                     <div className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-2xl border-4 border-green-400 shadow-xl">
                       <h4 className="text-xl font-bold text-green-800 mb-3 text-center flex items-center justify-center">
                         <span className="text-2xl mr-2">🏆</span>
-                        KAZANAN
+                        {gameState.results.winners.some(w => w.reason === 'blackjack') ? 'BLACKJACK KAZANAN!' : 'KAZANAN'}
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.winners.map((winner) => (
+                        {gameState.results.winners.map((winner) => {
+                          console.log('Winner:', winner.name, 'Reason:', winner.reason);
+                          return (
                           <div key={winner.id} className="bg-white p-3 rounded-lg border-2 border-green-300 shadow-sm">
-                            <div className="font-bold text-sm text-green-900">{winner.name}</div>
-                            <div className="text-green-700 text-xs mt-1">
-                              {winner.reason === 'dealer_busted' && '🎉 Battı!'}
-                              {winner.reason === 'higher_score' && '📈 Yüksek!'}
+                            <div className="font-bold text-sm text-green-900 flex items-center justify-center">
+                              {winner.name}
+                              {winner.reason === 'blackjack' && <span className="ml-2 text-yellow-600 text-lg animate-pulse">♠♥</span>}
+                            </div>
+                            <div className="text-green-700 text-xs mt-1 text-center font-bold">
+                              {winner.reason === 'dealer_busted' && '🎉 Krupiyer Battı!'}
+                              {winner.reason === 'higher_score' && '📈 Yüksek Skor!'}
+                              {winner.reason === 'blackjack' && '🎊 BLACKJACK!'}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -363,9 +430,10 @@ export default function BlackjackGame() {
                         {gameState.results.losers.map((loser) => (
                           <div key={loser.id} className="bg-white p-3 rounded-lg border-2 border-red-300 shadow-sm">
                             <div className="font-bold text-sm text-red-900">{loser.name}</div>
-                            <div className="text-red-700 text-xs mt-1">
+                            <div className="text-red-700 text-xs mt-1 text-center">
                               {loser.reason === 'busted' && '💥 Battı!'}
-                              {loser.reason === 'lower_score' && '📉 Düşük!'}
+                              {loser.reason === 'lower_score' && '📉 Düşük Skor!'}
+                              {loser.reason === 'dealer_blackjack' && '🏠 Krupiyer Blackjack!'}
                             </div>
                           </div>
                         ))}
@@ -383,8 +451,14 @@ export default function BlackjackGame() {
                       <div className="space-y-2">
                         {gameState.results.ties.map((tie) => (
                           <div key={tie.id} className="bg-white p-3 rounded-lg border-2 border-blue-300 shadow-sm">
-                            <div className="font-bold text-sm text-blue-900">{tie.name}</div>
-                            <div className="text-blue-700 text-xs mt-1">⚖️ Eşit!</div>
+                            <div className="font-bold text-sm text-blue-900 flex items-center justify-center">
+                              {tie.name}
+                              {tie.reason === 'blackjack_push' && <span className="ml-2 text-yellow-600 text-lg">♠♥</span>}
+                            </div>
+                            <div className="text-blue-700 text-xs mt-1 text-center">
+                              {tie.reason === 'tie' && '⚖️ Eşit Skor!'}
+                              {tie.reason === 'blackjack_push' && '🎭 Blackjack Berabere!'}
+                            </div>
                           </div>
                         ))}
                       </div>

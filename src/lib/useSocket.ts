@@ -8,7 +8,14 @@ export const useSocket = () => {
 
   useEffect(() => {
     if (!socket) {
-      socket = io('http://localhost:3001');
+      // Connect to the main Next.js server (not API route)
+      const socketUrl = process.env.NODE_ENV === 'production'
+        ? process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+        : 'http://localhost:3000';
+
+      socket = io(socketUrl, {
+        transports: ['websocket', 'polling']
+      });
     }
 
     socket.on('connect', () => {
