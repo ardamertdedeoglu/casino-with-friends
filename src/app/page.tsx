@@ -1,6 +1,32 @@
+'use client';
+
 import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const [roomId, setRoomId] = useState('');
+  const [showRoomInput, setShowRoomInput] = useState(false);
+  const router = useRouter();
+
+  const handleBlackjackClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!showRoomInput) {
+      setShowRoomInput(true);
+    }
+  };
+
+  const handleJoinRoom = () => {
+    if (roomId.trim()) {
+      router.push(`/blackjack/${roomId.trim()}`);
+    }
+  };
+
+  const handleRandomRoom = () => {
+    const randomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    router.push(`/blackjack/${randomId}`);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center p-4">
       <div className="max-w-6xl w-full">
@@ -15,10 +41,52 @@ export default function Home() {
           <div className="w-32 h-1 bg-yellow-400 mx-auto mt-4 rounded-full"></div>
         </div>
 
+        {/* Room Input Modal */}
+        {showRoomInput && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+              <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">🎯 Oda Seçimi</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-800 mb-2">Oda ID</label>
+                  <input
+                    type="text"
+                    placeholder="Örneğin: oyun123"
+                    value={roomId}
+                    onChange={(e) => setRoomId(e.target.value)}
+                    className="w-full p-4 border-3 border-gray-400 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleJoinRoom}
+                    disabled={!roomId.trim()}
+                    className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
+                  >
+                    Odaya Katıl
+                  </button>
+                  <button
+                    onClick={handleRandomRoom}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
+                  >
+                    Rastgele Oda
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowRoomInput(false)}
+                  className="w-full bg-gray-500 text-white p-3 rounded-xl font-bold text-lg hover:bg-gray-600 transition-all duration-200"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Games Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
           {/* Blackjack */}
-          <Link href="/blackjack" className="group">
+          <div onClick={handleBlackjackClick} className="group cursor-pointer">
             <div className="bg-gradient-to-br from-yellow-50 via-white to-yellow-100 p-8 rounded-3xl shadow-2xl border-4 border-yellow-400 hover:border-yellow-300 transform hover:-translate-y-4 transition-all duration-300 hover:shadow-3xl">
               <div className="text-center">
                 <div className="text-8xl mb-4 group-hover:animate-bounce">🃏</div>
@@ -29,7 +97,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </Link>
+          </div>
 
           {/* Roulette - Coming Soon */}
           <div className="bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 p-8 rounded-3xl shadow-2xl border-4 border-gray-400 opacity-75">

@@ -57,15 +57,15 @@ export const usePollingGame = (roomId: string, playerName: string) => {
   }, [roomId]);
 
   // Oyuna katıl
-  const joinGame = useCallback(async (playerId: string, name: string) => {
-    if (!roomId) return;
+  const joinGame = useCallback(async (playerId: string) => {
+    if (!roomId || !playerName) return;
 
     setIsLoading(true);
     try {
       const response = await fetch(`/api/game/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', playerId, playerName: name })
+        body: JSON.stringify({ action: 'join', playerId, playerName })
       });
 
       if (response.ok) {
@@ -78,7 +78,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     } finally {
       setIsLoading(false);
     }
-  }, [roomId, fetchGameState]);
+  }, [roomId, playerName, fetchGameState]);
 
   // Hamle yap
   const makeMove = useCallback(async (action: string, playerId?: string) => {

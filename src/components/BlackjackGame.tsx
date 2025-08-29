@@ -47,7 +47,7 @@ export default function BlackjackGame() {
     if (roomId && playerName) {
       const id = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setPlayerId(id);
-      await joinGame(id, playerName);
+      await joinGame(id);
       setJoined(true);
     }
   };
