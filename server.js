@@ -194,8 +194,9 @@ class BlackjackGame {
   dealerTurn() {
     console.log('🎩 Dealer starting turn...');
 
-    // Kısa bir gecikme ile dealer kartlarını aç
+    // İlk adım: Dealer'ın gizli kartını aç (1 saniye bekle)
     setTimeout(() => {
+      console.log('🎩 Step 1: Revealing dealer hidden card...');
       this.dealer.hiddenCard = false;
       const dealerScoreResult = this.calculateScore(this.dealer.hand);
       this.dealer.score = dealerScoreResult.score;
@@ -206,12 +207,21 @@ class BlackjackGame {
       this.io.to(this.roomId).emit('game-update', this.getGameState());
       console.log('📤 Dealer cards revealed to room:', this.roomId);
 
-      // If dealer doesn't have blackjack, play according to rules
-      if (!this.dealer.isBlackjack) {
-        console.log('🎩 Dealer does not have blackjack, checking if needs to hit...');
-        console.log('🎩 Dealer current score:', this.dealer.score, 'Hand:', this.dealer.hand);
-        let hitCount = 0;
-        while (this.dealer.score < 17) {
+      // İkinci adım: Dealer'ın kart çekme işlemlerini yap
+      this.dealerHitSequence();
+    }, 1000); // 1 saniye bekle ki gizli kart görünsün
+  }
+
+  dealerHitSequence() {
+    console.log('🎩 Step 2: Dealer hit sequence starting...');
+
+    // If dealer doesn't have blackjack, play according to rules
+    if (!this.dealer.isBlackjack) {
+      console.log('🎩 Dealer does not have blackjack, checking if needs to hit...');
+      console.log('🎩 Dealer current score:', this.dealer.score, 'Hand:', this.dealer.hand);
+      let hitCount = 0;
+      const hitDealer = () => {
+        if (this.dealer.score < 17) {
           console.log(`🎩 Dealer score ${this.dealer.score} < 17, dealer will hit...`);
           this.dealer.hand.push(this.dealCard());
           const newScoreResult = this.calculateScore(this.dealer.hand);
@@ -223,13 +233,30 @@ class BlackjackGame {
           // Dealer kart çekti, güncel durumu gönder
           this.io.to(this.roomId).emit('game-update', this.getGameState());
           console.log(`📤 Dealer hit ${hitCount} sent to room:`, this.roomId);
-        }
-        console.log('🎩 Dealer finished hitting. Final score:', this.dealer.score, 'Hand:', this.dealer.hand);
-      } else {
-        console.log('🎩 Dealer has blackjack, skipping hit phase');
-      }
 
-      // Dealer hamleleri bitti, sonuçları hesapla
+          // Bir sonraki kart çekişi için 1.5 saniye bekle
+          setTimeout(hitDealer, 1500);
+        } else {
+          console.log('🎩 Dealer finished hitting. Final score:', this.dealer.score, 'Hand:', this.dealer.hand);
+          // Kart çekme bitti, sonuçları hesapla
+          this.calculateFinalResults();
+        }
+      };
+
+      // İlk kart çekişini başlat
+      setTimeout(hitDealer, 1500);
+    } else {
+      console.log('🎩 Dealer has blackjack, skipping hit phase');
+      // Blackjack varsa direkt sonuçlara geç
+      this.calculateFinalResults();
+    }
+  }
+
+  calculateFinalResults() {
+    console.log('🎩 Step 3: Calculating final results...');
+
+    // Kısa bir bekleme ile sonuçları hesapla
+    setTimeout(() => {
       console.log('🎩 Calculating results...');
       this.calculateResults();
       this.gameState = 'finished';
@@ -238,7 +265,7 @@ class BlackjackGame {
       // Game state'i client'lara gönder
       this.io.to(this.roomId).emit('game-update', this.getGameState());
       console.log('📤 Dealer turn completed and results sent to room:', this.roomId);
-    }, 3000); // 3 saniye bekle ki dealer hamleleri ve sonuçlar görünsün
+    }, 1000); // 1 saniye bekle ki final durumu görünsün
   }
 
   calculateResults() {
