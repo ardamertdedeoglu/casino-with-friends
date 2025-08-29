@@ -88,8 +88,8 @@ class BlackjackGame {
       aces--;
     }
 
-    // Check for blackjack (21 with exactly 2 cards)
-    if (score === 21 && hand.length === 2) {
+    // Check for blackjack (21 with any number of cards)
+    if (score === 21) {
       isBlackjack = true;
     }
 
@@ -137,16 +137,31 @@ class BlackjackGame {
 
     this.dealer.hand = [this.dealCard(), this.dealCard()];
     const dealerScoreResult = this.calculateScore(this.dealer.hand);
-    this.dealer.score = dealerScoreResult.score;
+    // Dealer'ın kapalı kartı varken sadece ilk kartın skoru gösterilsin
+    if (this.dealer.hiddenCard) {
+      const firstCardScore = this.calculateScore([this.dealer.hand[0]]);
+      this.dealer.score = firstCardScore.score;
+    } else {
+      this.dealer.score = dealerScoreResult.score;
+    }
     this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
     this.dealer.hiddenCard = true;
 
-    // If dealer has blackjack, reveal it immediately
-    if (this.dealer.isBlackjack) {
-      this.dealer.hiddenCard = false;
+    // İlk aktif oyuncuyu bul (blackjack yapanları atla)
+    const playerIds = Array.from(this.players.keys());
+    this.currentPlayer = null;
+    for (const playerId of playerIds) {
+      const player = this.players.get(playerId);
+      if (player && player.status === 'playing') {
+        this.currentPlayer = playerId;
+        break;
+      }
     }
 
-    this.currentPlayer = Array.from(this.players.keys())[0];
+    // Eğer hiç aktif oyuncu yoksa, dealer'ın sırası
+    if (!this.currentPlayer) {
+      this.dealerTurn();
+    }
   }
 
   hit(playerId: string) {
@@ -159,6 +174,9 @@ class BlackjackGame {
 
       if (player.score > 21) {
         player.status = 'busted';
+        this.nextPlayer();
+      } else if (player.isBlackjack) {
+        player.status = 'stood';
         this.nextPlayer();
       }
     }
@@ -174,28 +192,51 @@ class BlackjackGame {
 
   nextPlayer() {
     const playerIds = Array.from(this.players.keys());
-    if (this.currentPlayer) {
-      const currentIndex = playerIds.indexOf(this.currentPlayer);
-      const nextIndex = (currentIndex + 1) % playerIds.length;
+    if (!this.currentPlayer || playerIds.length === 0) {
+      return;
+    }
 
-      let allFinished = true;
-      for (const player of this.players.values()) {
-        if (player.status === 'playing') {
-          allFinished = false;
+    const currentIndex = playerIds.indexOf(this.currentPlayer);
+    if (currentIndex === -1) {
+      // Current player not found, start with first player
+      this.currentPlayer = playerIds[0];
+      return;
+    }
+
+    // Check if all players are finished (stood, busted, or blackjack)
+    let allFinished = true;
+    let nextActivePlayerIndex = -1;
+
+    for (let i = 0; i < playerIds.length; i++) {
+      const player = this.players.get(playerIds[i]);
+      if (player && player.status === 'playing') {
+        if (i > currentIndex && nextActivePlayerIndex === -1) {
+          nextActivePlayerIndex = i;
+        }
+        allFinished = false;
+      }
+    }
+
+    if (allFinished) {
+      this.dealerTurn();
+    } else if (nextActivePlayerIndex !== -1) {
+      // Move to next active player
+      this.currentPlayer = playerIds[nextActivePlayerIndex];
+    } else {
+      // No active player found after current, start from beginning
+      for (let i = 0; i < playerIds.length; i++) {
+        const player = this.players.get(playerIds[i]);
+        if (player && player.status === 'playing') {
+          this.currentPlayer = playerIds[i];
           break;
         }
-      }
-
-      if (allFinished) {
-        this.dealerTurn();
-      } else {
-        this.currentPlayer = playerIds[nextIndex];
       }
     }
   }
 
   dealerTurn() {
     this.dealer.hiddenCard = false;
+    // Dealer'ın tüm kartlarının skorunu hesapla
     const dealerScoreResult = this.calculateScore(this.dealer.hand);
     this.dealer.score = dealerScoreResult.score;
     this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
@@ -292,10 +333,20 @@ class BlackjackGame {
   }
 
   getGameState() {
+    // Dealer'ın kapalı kartı varsa sadece ilk kartın skorunu göster
+    let dealerScore = this.dealer.score;
+    if (this.dealer.hiddenCard && this.dealer.hand.length > 0) {
+      const firstCardScore = this.calculateScore([this.dealer.hand[0]]);
+      dealerScore = firstCardScore.score;
+    }
+
     return {
       roomId: this.roomId,
       players: Array.from(this.players.values()),
-      dealer: this.dealer,
+      dealer: {
+        ...this.dealer,
+        score: dealerScore
+      },
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
       results: this.results
@@ -387,6 +438,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       case 'leave':
         if (playerId) {
           game.players.delete(playerId);
+          // Eğer hiç oyuncu kalmadıysa veya oyun başladıysa waiting'e geç
+          if (game.players.size === 0 || game.gameState === 'playing') {
+            game.gameState = 'waiting';
+            game.currentPlayer = null;
+            game.results = null;
+          }
         }
         break;
 

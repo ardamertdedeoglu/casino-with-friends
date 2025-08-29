@@ -41,7 +41,7 @@ export default function BlackjackGame() {
   const [playerName, setPlayerName] = useState('');
   const [joined, setJoined] = useState(false);
   const [playerId, setPlayerId] = useState('');
-  const { gameState, joinGame, makeMove, restartGame, leaveGame, isLoading } = usePollingGame(roomId, playerName);
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, isLoading } = usePollingGame(roomId, playerName);
 
   // Component unmount olduğunda player'ı odadan çıkar
   useEffect(() => {
@@ -64,12 +64,6 @@ export default function BlackjackGame() {
       setPlayerId(id);
       await joinGame(id);
       setJoined(true);
-    }
-  };
-
-  const startGame = async () => {
-    if (roomId) {
-      await makeMove('start');
     }
   };
 
@@ -223,6 +217,9 @@ export default function BlackjackGame() {
           </div>
           <div className="text-center mt-4">
             <p className="text-yellow-300 text-lg font-semibold">Skor: <span className="text-white text-xl">{gameState.dealer.score}</span></p>
+            {gameState.dealer.isBlackjack && !gameState.dealer.hiddenCard && (
+              <p className="text-red-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! 🃏</p>
+            )}
           </div>
         </div>
 
@@ -253,7 +250,7 @@ export default function BlackjackGame() {
                 resultIcon = '❌';
                 const loserInfo = gameState.results.losers.find(l => l.id === player.id);
                 if (loserInfo?.reason === 'dealer_blackjack') {
-                  resultText = 'Krupiyer Blackjack!';
+                  resultText = 'Kurpiyer Blackjack!';
                 } else {
                   resultText = 'Kaybettin!';
                 }
@@ -328,7 +325,7 @@ export default function BlackjackGame() {
           </div>
         )}
 
-        {gameState.gameState === 'playing' as string && isMyTurn && currentPlayerData?.status === 'playing' && (
+        {gameState.gameState === 'playing' as string && isMyTurn && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
           <div className="text-center space-x-6">
             <button
               onClick={hit}
@@ -342,6 +339,12 @@ export default function BlackjackGame() {
             >
               ✋ Dur (Stand)
             </button>
+          </div>
+        )}
+
+        {gameState.gameState === 'playing' as string && isMyTurn && currentPlayerData?.isBlackjack && (
+          <div className="text-center">
+            <p className="text-green-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! Otomatik olarak bekleniyor...</p>
           </div>
         )}
 
@@ -373,13 +376,12 @@ export default function BlackjackGame() {
                     {gameState.dealer.isBlackjack && (
                       <div className="animate-pulse mb-4">
                         <p className="text-yellow-400 font-bold text-3xl mb-2">🎊 BLACKJACK!</p>
-                        <p className="text-yellow-200 text-lg">Krupiyer 21 yaptı!</p>
+                        <p className="text-yellow-200 text-lg">Kurpiyer 21 yaptı!</p>
                       </div>
                     )}
                     {gameState.results.dealerBusted && (
                       <div className="animate-pulse">
                         <p className="text-red-400 font-bold text-2xl mb-2">💥 BATTI!</p>
-                        <p className="text-yellow-200 text-lg">Tüm oyuncular kazandı!</p>
                       </div>
                     )}
                     {!gameState.results.dealerBusted && !gameState.dealer.isBlackjack && gameState.dealer.score <= 21 && (
@@ -407,7 +409,7 @@ export default function BlackjackGame() {
                               {winner.reason === 'blackjack' && <span className="ml-2 text-yellow-600 text-lg animate-pulse">♠♥</span>}
                             </div>
                             <div className="text-green-700 text-xs mt-1 text-center font-bold">
-                              {winner.reason === 'dealer_busted' && '🎉 Krupiyer Battı!'}
+                              {winner.reason === 'dealer_busted' && '🎉 Kurpiyer Battı!'}
                               {winner.reason === 'higher_score' && '📈 Yüksek Skor!'}
                               {winner.reason === 'blackjack' && '🎊 BLACKJACK!'}
                             </div>
@@ -432,7 +434,7 @@ export default function BlackjackGame() {
                             <div className="text-red-700 text-xs mt-1 text-center">
                               {loser.reason === 'busted' && '💥 Battı!'}
                               {loser.reason === 'lower_score' && '📉 Düşük Skor!'}
-                              {loser.reason === 'dealer_blackjack' && '🏠 Krupiyer Blackjack!'}
+                              {loser.reason === 'dealer_blackjack' && '🏠 Kurpiyer Blackjack!'}
                             </div>
                           </div>
                         ))}

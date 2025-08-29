@@ -88,7 +88,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       const response = await fetch(`/api/game/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, playerId, playerName })
+        body: JSON.stringify({ action, playerId })
       });
 
       if (response.ok) {
@@ -99,7 +99,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     } catch (error) {
       console.error('Move error:', error);
     }
-  }, [roomId, playerName, fetchGameState]);
+  }, [roomId, fetchGameState]);
 
   // Oyundan çık
   const leaveGame = useCallback(async (playerId: string) => {
@@ -130,7 +130,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       const response = await fetch(`/api/game/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', playerName })
+        body: JSON.stringify({ action: 'start' })
       });
 
       if (response.ok) {
@@ -141,7 +141,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     } catch (error) {
       console.error('Start game error:', error);
     }
-  }, [roomId, playerName, fetchGameState]);
+  }, [roomId, fetchGameState]);
 
   // Oyunu yeniden başlat
   const restartGame = useCallback(async () => {
@@ -151,7 +151,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
       const response = await fetch(`/api/game/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'restart', playerName })
+        body: JSON.stringify({ action: 'restart' })
       });
 
       if (response.ok) {
@@ -162,7 +162,7 @@ export const usePollingGame = (roomId: string, playerName: string) => {
     } catch (error) {
       console.error('Restart game error:', error);
     }
-  }, [roomId, playerName, fetchGameState]);
+  }, [roomId, fetchGameState]);
 
   // Periyodik olarak oyun durumunu güncelle
   useEffect(() => {
