@@ -413,8 +413,8 @@ export default function BlackjackGame() {
                     )}
                   </div>
                   <p className="text-gray-600 capitalize font-medium">
-                    {player.status === 'playing' && player.isBlackjack && '� BLACKJACK!'}
-                    {player.status === 'playing' && !player.isBlackjack && '�🃏 Oynuyor'}
+                    {player.status === 'playing' && player.isBlackjack && '👑 BLACKJACK!'}
+                    {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
                     {player.status === 'stood' && player.isBlackjack && '🎉 Blackjack & Durdu'}
                     {player.status === 'stood' && !player.isBlackjack && '✋ Durdu'}
                     {player.status === 'busted' && '💥 Battı'}
