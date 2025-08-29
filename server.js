@@ -155,12 +155,12 @@ class BlackjackGame {
 
   nextPlayer() {
     console.log('🔄 nextPlayer() called');
-    const playerIds = Array.from(this.players.keys());
-    const currentIndex = playerIds.indexOf(this.currentPlayer);
-    const nextIndex = (currentIndex + 1) % playerIds.length;
+    const allPlayerIds = Array.from(this.players.keys());
+    const activePlayerIds = allPlayerIds.filter(id => this.players.get(id).status === 'playing');
 
-    console.log('👥 Player statuses:', Array.from(this.players.values()).map(p => ({ id: p.id, name: p.name, status: p.status, score: p.score })));
-    console.log('🎯 Current player:', this.currentPlayer, 'Index:', currentIndex);
+    console.log('👥 All players:', Array.from(this.players.values()).map(p => ({ id: p.id, name: p.name, status: p.status, score: p.score })));
+    console.log('🎯 Current player:', this.currentPlayer);
+    console.log('🎮 Active players (playing status):', activePlayerIds);
 
     let allFinished = true;
     for (const player of this.players.values()) {
@@ -175,8 +175,18 @@ class BlackjackGame {
       console.log('✅ All players finished, starting dealer turn...');
       this.dealerTurn();
     } else {
-      this.currentPlayer = playerIds[nextIndex];
-      console.log('➡️ Next player:', this.currentPlayer, 'Index:', nextIndex);
+      // Sadece aktif (playing) oyuncular arasında geçiş yap
+      const currentActiveIndex = activePlayerIds.indexOf(this.currentPlayer);
+      if (currentActiveIndex === -1) {
+        // Current player artık aktif değil, ilk aktif oyuncuya geç
+        this.currentPlayer = activePlayerIds[0];
+        console.log('🔄 Current player not active, switching to first active player:', this.currentPlayer);
+      } else {
+        // Bir sonraki aktif oyuncuya geç
+        const nextActiveIndex = (currentActiveIndex + 1) % activePlayerIds.length;
+        this.currentPlayer = activePlayerIds[nextActiveIndex];
+        console.log('➡️ Next active player:', this.currentPlayer, 'Index:', nextActiveIndex);
+      }
     }
   }
 
