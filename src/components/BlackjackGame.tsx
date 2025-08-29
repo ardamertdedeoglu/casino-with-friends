@@ -49,7 +49,7 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId } = useSocketGame(roomId, playerName);
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId } = useSocketGame(roomId, playerName, joined);
 
   // Component unmount olduğunda player'ı odadan çıkar - kaldırıldı çünkü sorun yaratıyor
 
@@ -332,15 +332,18 @@ export default function BlackjackGame() {
 
             return (
               <div key={player.id} className={`p-6 rounded-xl shadow-xl border-2 transition-all duration-300 ${
-                gameState.gameState === 'finished' as string && resultStyle
-                  ? resultStyle
-                  : isMyTurn && player.id === playerId
-                    ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
-                    : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
+                player.isBlackjack
+                  ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 via-yellow-100 to-yellow-200 shadow-yellow-200'
+                  : gameState.gameState === 'finished' as string && resultStyle
+                    ? resultStyle
+                    : isMyTurn && player.id === playerId
+                      ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
+                      : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
               }`}>
                 <h3 className="text-xl font-bold text-gray-800 mb-3 text-center">
                   {player.name}
                   {player.id === socketId && <span className="text-blue-600 ml-2">(Sen)</span>}
+                  {player.isBlackjack && <span className="text-yellow-600 ml-2 text-lg animate-pulse">👑</span>}
                   {isMyTurn && player.id === socketId && <span className="text-yellow-600 ml-2">🎯</span>}
                   {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                 </h3>
@@ -362,18 +365,25 @@ export default function BlackjackGame() {
                     <div key={index} className="relative">
                       {renderCard(card)}
                       {player.isBlackjack && index === player.hand.length - 1 && (
-                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
-                          BLACKJACK!
+                        <div className="absolute -top-4 -right-4 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-bold text-sm px-3 py-2 rounded-full shadow-2xl border-3 border-yellow-300 animate-bounce transform rotate-12">
+                          🎉 BLACKJACK! 🎉
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                  <div className="flex items-center justify-center space-x-2">
+                    <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                    {player.isBlackjack && (
+                      <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
+                    )}
+                  </div>
                   <p className="text-gray-600 capitalize font-medium">
-                    {player.status === 'playing' && '🃏 Oynuyor'}
-                    {player.status === 'stood' && '✋ Durdu'}
+                    {player.status === 'playing' && player.isBlackjack && '� BLACKJACK!'}
+                    {player.status === 'playing' && !player.isBlackjack && '�🃏 Oynuyor'}
+                    {player.status === 'stood' && player.isBlackjack && '🎉 Blackjack & Durdu'}
+                    {player.status === 'stood' && !player.isBlackjack && '✋ Durdu'}
                     {player.status === 'busted' && '💥 Battı'}
                   </p>
                   {resultText && (

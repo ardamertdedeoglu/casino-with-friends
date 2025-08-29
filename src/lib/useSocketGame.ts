@@ -31,7 +31,7 @@ interface GameState {
   } | null;
 }
 
-export const useSocketGame = (roomId: string, playerName: string) => {
+export const useSocketGame = (roomId: string, playerName: string, joined: boolean = false) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,7 +40,7 @@ export const useSocketGame = (roomId: string, playerName: string) => {
 
   // Socket.IO bağlantısını başlat
   useEffect(() => {
-    if (!roomId || !playerName) return;
+    if (!roomId || !playerName || !joined) return;
 
     console.log('🔌 Initializing Socket.IO connection...');
 

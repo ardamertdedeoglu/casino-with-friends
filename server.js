@@ -167,23 +167,37 @@ class BlackjackGame {
   }
 
   dealerTurn() {
-    this.dealer.hiddenCard = false;
-    const dealerScoreResult = this.calculateScore(this.dealer.hand);
-    this.dealer.score = dealerScoreResult.score;
-    this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
+    console.log('🎩 Dealer starting turn...');
 
-    // If dealer doesn't have blackjack, play according to rules
-    if (!this.dealer.isBlackjack) {
-      while (this.dealer.score < 17) {
-        this.dealer.hand.push(this.dealCard());
-        const newScoreResult = this.calculateScore(this.dealer.hand);
-        this.dealer.score = newScoreResult.score;
-        this.dealer.isBlackjack = newScoreResult.isBlackjack;
+    // Kısa bir gecikme ile dealer kartlarını aç
+    setTimeout(() => {
+      this.dealer.hiddenCard = false;
+      const dealerScoreResult = this.calculateScore(this.dealer.hand);
+      this.dealer.score = dealerScoreResult.score;
+      this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
+      console.log('🎩 Dealer reveals cards:', this.dealer.hand, 'Score:', this.dealer.score);
+
+      // If dealer doesn't have blackjack, play according to rules
+      if (!this.dealer.isBlackjack) {
+        let hitCount = 0;
+        while (this.dealer.score < 17) {
+          console.log('🎩 Dealer hits...');
+          this.dealer.hand.push(this.dealCard());
+          const newScoreResult = this.calculateScore(this.dealer.hand);
+          this.dealer.score = newScoreResult.score;
+          this.dealer.isBlackjack = newScoreResult.isBlackjack;
+          hitCount++;
+          console.log(`🎩 Dealer hit ${hitCount}:`, this.dealer.hand[this.dealer.hand.length - 1], 'New score:', this.dealer.score);
+        }
+        console.log('🎩 Dealer stands with score:', this.dealer.score);
       }
-    }
 
-    this.calculateResults();
-    this.gameState = 'finished';
+      // Dealer hamleleri bitti, sonuçları hesapla
+      console.log('🎩 Calculating results...');
+      this.calculateResults();
+      this.gameState = 'finished';
+      console.log('🎩 Game finished with results:', this.results);
+    }, 1500); // 1.5 saniye bekle ki dealer hamleleri görünsün
   }
 
   calculateResults() {
