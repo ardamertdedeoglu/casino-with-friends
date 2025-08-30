@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useSocketGame } from '../lib/useSocketGame';
@@ -22,11 +22,25 @@ interface Player {
   winnings?: number;
 }
 
+interface ChatMessage {
+  id: string;
+  name: string;
+  message: string;
+  timestamp: number;
+}
+
 interface ScoreboardEntry {
   id: string;
   name: string;
   winnings: number;
   isDealer: boolean;
+}
+
+interface ChatMessage {
+  id: string;
+  name: string;
+  message: string;
+  timestamp: number;
 }
 
 interface GameResults {
@@ -38,21 +52,6 @@ interface GameResults {
   scoreboard?: Array<ScoreboardEntry>;
 }
 
-interface GameState {
-  roomId: string;
-  players: Player[];
-  dealer: {
-    hand: Card[];
-    score: number;
-    hiddenCard: boolean;
-    isBlackjack?: boolean;
-    visibleScore: number
-  };
-  gameState: string;
-  currentPlayer: string;
-  results?: GameResults | null;
-}
-
 export default function BlackjackGame() {
   const params = useParams();
   const roomId = params.roomId as string;
@@ -61,17 +60,39 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const [chatMessages, setChatMessages] = useState<Array<{id: string, name: string, message: string, timestamp: number}>>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [showChat, setShowChat] = useState(false);
 
+  // Ref to store sendChatMessage function
+  const sendChatMessageRef = useRef<((message: string) => void) | null>(null);
+
   // Handle incoming chat messages
-  const handleChatMessage = useCallback((message: any) => {
+  const handleChatMessage = useCallback((message: ChatMessage) => {
     console.log('💬 Received chat message:', message);
     setChatMessages(prev => [...prev, message]);
   }, []);
 
+  // Handle Enter key press for chat input
+  const handleChatKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const trimmedMessage = chatInput.trim();
+      if (trimmedMessage && sendChatMessageRef.current) {
+        sendChatMessageRef.current(trimmedMessage);
+        setChatInput('');
+      }
+    }
+  }, [chatInput]);
+
   const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error, sendChatMessage } = useSocketGame(roomId, playerName, joined, handleChatMessage);
+
+  // Update sendChatMessage ref when it's available
+  useEffect(() => {
+    if (sendChatMessage) {
+      sendChatMessageRef.current = sendChatMessage;
+    }
+  }, [sendChatMessage]);
 
   // Game state değiştiğinde loading'i kapat
   useEffect(() => {
@@ -282,7 +303,7 @@ export default function BlackjackGame() {
     try {
       await navigator.clipboard.writeText(currentUrl);
       alert('🎉 Davet linki kopyalandı! Arkadaşlarını davet etmek için linki paylaşabilirsin.');
-    } catch (err) {
+    } catch {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = currentUrl;
@@ -293,17 +314,6 @@ export default function BlackjackGame() {
       alert('🎉 Davet linki kopyalandı! Arkadaşlarını davet etmek için linki paylaşabilirsin.');
     }
   };
-
-  const handleChatKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const trimmedMessage = chatInput.trim();
-      if (trimmedMessage) {
-        sendChatMessage(trimmedMessage);
-        setChatInput('');
-      }
-    }
-  }, [chatInput, sendChatMessage]);
 
   console.log('🎮 Game State:', gameState);
   console.log('🎯 Is My Turn:', isMyTurn);

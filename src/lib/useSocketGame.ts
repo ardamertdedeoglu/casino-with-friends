@@ -32,7 +32,7 @@ interface GameState {
   } | null;
 }
 
-export const useSocketGame = (roomId: string, playerName: string, joined: boolean = false, onChatMessage?: (message: any) => void) => {
+export const useSocketGame = (roomId: string, playerName: string, joined: boolean = false, onChatMessage?: (message: {id: string, name: string, message: string, timestamp: number}) => void) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
