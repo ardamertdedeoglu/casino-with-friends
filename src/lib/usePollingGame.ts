@@ -27,6 +27,7 @@ interface GameState {
     winners: Array<{ id: string; name: string; reason: string }>;
     losers: Array<{ id: string; name: string; reason: string }>;
     ties: Array<{ id: string; name: string; reason: string }>;
+    scoreboard?: Array<{ id: string; name: string; winnings: number; isDealer: boolean }>;
   } | null;
 }
 

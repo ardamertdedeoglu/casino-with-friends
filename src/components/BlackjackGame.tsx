@@ -22,26 +22,35 @@ interface Player {
   winnings?: number;
 }
 
+interface ScoreboardEntry {
+  id: string;
+  name: string;
+  winnings: number;
+  isDealer: boolean;
+}
+
+interface GameResults {
+  dealerBusted: boolean;
+  dealerBlackjack?: boolean;
+  winners: Array<{ id: string; name: string; reason: string }>;
+  losers: Array<{ id: string; name: string; reason: string }>;
+  ties: Array<{ id: string; name: string; reason: string }>;
+  scoreboard?: Array<ScoreboardEntry>;
+}
+
 interface GameState {
   roomId: string;
   players: Player[];
-  dealer: { 
-    hand: Card[]; 
-    score: number; 
-    hiddenCard: boolean; 
-    isBlackjack?: boolean; 
-    visibleScore: number 
+  dealer: {
+    hand: Card[];
+    score: number;
+    hiddenCard: boolean;
+    isBlackjack?: boolean;
+    visibleScore: number
   };
   gameState: string;
   currentPlayer: string;
-  results?: {
-    dealerBusted: boolean;
-    dealerBlackjack?: boolean;
-    winners: Array<{ id: string; name: string; reason: string }>;
-    losers: Array<{ id: string; name: string; reason: string }>;
-    ties: Array<{ id: string; name: string; reason: string }>;
-    scoreboard?: Array<{ id: string; name: string; winnings: number; isDealer: boolean }>;
-  } | null;
+  results?: GameResults | null;
 }
 
 export default function BlackjackGame() {
@@ -271,7 +280,7 @@ export default function BlackjackGame() {
       {/* Scoreboard - Top Right Corner */}
       <div className="absolute top-4 right-4 z-10 w-80">
         <Scoreboard
-          scoreboard={(gameState?.results as any)?.scoreboard || []}
+          scoreboard={(gameState?.results as GameResults)?.scoreboard || []}
           className="shadow-2xl"
         />
       </div>
@@ -651,20 +660,20 @@ export default function BlackjackGame() {
                 </div>
 
                 {/* Current Scores Display */}
-                {(gameState.results as any)?.scoreboard && (gameState.results as any)?.scoreboard.length > 0 && (
+                {(gameState.results as GameResults)?.scoreboard && (gameState.results as GameResults)?.scoreboard!.length > 0 && (
                   <div className="mt-8 p-6 bg-gradient-to-br from-purple-900 via-purple-800 to-purple-900 rounded-2xl border-4 border-purple-400 shadow-2xl">
                     <h3 className="text-2xl font-bold text-purple-300 mb-4 text-center flex items-center justify-center">
                       <span className="text-3xl mr-3">💰</span>
                       GÜNCEL SKORLAR
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {(gameState.results as any)?.scoreboard!.map((entry: { id: string; name: string; winnings: number; isDealer: boolean }, index: number) => (
+                      {(gameState.results as GameResults)?.scoreboard!.map((entry: ScoreboardEntry, index: number) => (
                         <div
                           key={entry.id}
                           className={`p-4 rounded-xl border-2 text-center transition-all duration-300 ${
                             entry.isDealer
                               ? 'bg-gradient-to-r from-red-800 to-red-700 border-red-500'
-                              : index === 0 && (gameState.results as any)?.scoreboard!.length > 1
+                              : index === 0 && (gameState.results as GameResults)?.scoreboard!.length > 1
                                 ? 'bg-gradient-to-r from-yellow-800 to-yellow-700 border-yellow-500 animate-pulse'
                                 : 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-500'
                           }`}
@@ -682,7 +691,7 @@ export default function BlackjackGame() {
                             </span>
                             <span className="text-yellow-400 text-xl">💰</span>
                           </div>
-                          {index === 0 && (gameState.results as any)?.scoreboard!.length > 1 && !entry.isDealer && (
+                          {index === 0 && (gameState.results as GameResults)?.scoreboard!.length > 1 && !entry.isDealer && (
                             <div className="text-yellow-300 text-sm font-bold mt-1">👑 Lider</div>
                           )}
                         </div>
