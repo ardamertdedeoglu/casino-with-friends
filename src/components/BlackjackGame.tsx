@@ -475,12 +475,40 @@ export default function BlackjackGame() {
                   ))}
                 </div>
                 <div className="text-center space-y-1">
-                  <div className="flex items-center justify-center space-x-2">
-                    <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
-                    {player.isBlackjack && (
-                      <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
-                    )}
-                  </div>
+                  {/* Hit/Stand buttons for current player */}
+                  {isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
+                    <div className="flex items-center justify-center space-x-4 mb-2">
+                      <button
+                        onClick={hit}
+                        className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-blue-500 flex items-center space-x-1"
+                      >
+                        <span className="text-lg">🃏</span>
+                        <span>HIT</span>
+                      </button>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                        {player.isBlackjack && (
+                          <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={stand}
+                        className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-red-500 flex items-center space-x-1"
+                      >
+                        <span className="text-lg">✋</span>
+                        <span>STAND</span>
+                      </button>
+                    </div>
+                  )}
+                  {/* Score display for other players or when not player's turn */}
+                  {!(isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack) && (
+                    <div className="flex items-center justify-center space-x-2">
+                      <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                      {player.isBlackjack && (
+                        <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
+                      )}
+                    </div>
+                  )}
                   {player.winnings !== undefined && player.winnings > 0 && (
                     <div className="flex items-center justify-center space-x-1 mt-1">
                       <span className="text-green-600 font-bold text-sm">💰 {player.winnings}</span>
@@ -521,23 +549,6 @@ export default function BlackjackGame() {
               }`}
             >
               {isLoading ? '🎲 Oyun Başlatılıyor...' : '🎲 Oyunu Başlat'}
-            </button>
-          </div>
-        )}
-
-        {gameState.gameState === 'playing' as string && isMyTurn && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
-          <div className="text-center space-x-6">
-            <button
-              onClick={hit}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-blue-500"
-            >
-              🃏 Kart Al (Hit)
-            </button>
-            <button
-              onClick={stand}
-              className="bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-red-700 hover:to-red-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-red-500"
-            >
-              ✋ Dur (Stand)
             </button>
           </div>
         )}
