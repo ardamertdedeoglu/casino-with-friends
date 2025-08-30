@@ -643,7 +643,7 @@ export default function BlackjackGame() {
 
         {/* Chat Panel */}
         {showChat && (
-          <div className="fixed bottom-20 right-4 w-80 h-96 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl border-2 border-gray-600 z-40 flex flex-col">
+          <div className="fixed bottom-20 right-4 w-80 h-[550px] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl border-2 border-gray-600 z-40 flex flex-col">
             {/* Chat Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 rounded-t-2xl border-b-2 border-blue-500">
               <h3 className="text-white font-bold text-lg text-center">💬 Sohbet</h3>
@@ -668,9 +668,9 @@ export default function BlackjackGame() {
                       {msg.name}
                     </div>
                     {/* Message Bubble */}
-                    <div className={`p-3 rounded-2xl max-w-[80%] ${
+                    <div className={`p-3 rounded-2xl max-w-[70%] ${
                       msg.id === socketId
-                        ? 'bg-blue-600 text-white ml-auto text-right'
+                        ? 'bg-blue-600 text-white'
                         : 'bg-gray-700 text-gray-100'
                     }`}>
                       <p className="text-sm break-words">{msg.message}</p>
