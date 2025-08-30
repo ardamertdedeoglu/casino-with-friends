@@ -267,6 +267,23 @@ export default function BlackjackGame() {
   const isMyTurn = gameState.currentPlayer === socketId;
   const currentPlayerData = gameState.players.find((p: Player) => p.id === socketId);
 
+  const copyInviteLink = async () => {
+    const currentUrl = window.location.href;
+    try {
+      await navigator.clipboard.writeText(currentUrl);
+      alert('🎉 Davet linki kopyalandı! Arkadaşlarını davet etmek için linki paylaşabilirsin.');
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = currentUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert('🎉 Davet linki kopyalandı! Arkadaşlarını davet etmek için linki paylaşabilirsin.');
+    }
+  };
+
   console.log('🎮 Game State:', gameState);
   console.log('🎯 Is My Turn:', isMyTurn);
   console.log('🔑 Socket ID:', socketId);
@@ -277,6 +294,19 @@ export default function BlackjackGame() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4 relative">
+      {/* Invite Button - Top Left Corner (only when waiting) */}
+      {gameState?.gameState === 'waiting' && (
+        <div className="absolute top-4 left-4 z-10">
+          <button
+            onClick={copyInviteLink}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center space-x-2"
+          >
+            <span className="text-lg">👥</span>
+            <span>ARKADAŞLARINI DAVET ET</span>
+          </button>
+        </div>
+      )}
+
       {/* Scoreboard - Top Right Corner */}
       <div className="absolute top-4 right-4 z-10 w-80">
         <Scoreboard
