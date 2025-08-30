@@ -123,6 +123,21 @@ class BlackjackGame {
     }
 
     this.currentPlayer = Array.from(this.players.keys())[0];
+
+    // Find the first player who is still playing (not blackjack)
+    const activePlayers = Array.from(this.players.values()).filter(p => p.status === 'playing');
+    if (activePlayers.length > 0) {
+      // Set currentPlayer to the first active player
+      const firstActivePlayerId = Array.from(this.players.entries()).find(([id, player]) => player.status === 'playing')?.[0];
+      if (firstActivePlayerId) {
+        this.currentPlayer = firstActivePlayerId;
+        console.log(`🎯 Game starting with active player: ${this.players.get(this.currentPlayer).name}`);
+      }
+    } else {
+      // All players got blackjack, dealer turn starts immediately
+      console.log(`🎯 All players got blackjack, dealer turn starts immediately`);
+      this.dealerTurn();
+    }
   }
 
   hit(playerId) {
