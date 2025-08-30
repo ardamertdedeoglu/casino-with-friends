@@ -148,9 +148,14 @@ class BlackjackGame {
         player.status = 'busted';
         console.log(`💥 Player ${playerId} busted with score: ${player.score}`);
         this.nextPlayer(); // Sadece busted olduğunda sıradaki oyuncuya geç
+      } else if (player.isBlackjack) {
+        // Oyuncu kart çekerek blackjack yaptı
+        player.status = 'stood';
+        console.log(`♠️ Player ${playerId} (${player.name}) got blackjack by hitting!`);
+        this.nextPlayer(); // Blackjack yapıldığında da sıradaki oyuncuya geç
       } else {
         console.log(`🎯 Player ${playerId} hit, new score: ${player.score}`);
-        // Busted olmadıysa, aynı oyuncunun sırası devam eder
+        // Busted veya blackjack olmadıysa, aynı oyuncunun sırası devam eder
         // nextPlayer() çağrılMAZ!
       }
     }
