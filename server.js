@@ -555,13 +555,31 @@ app.prepare().then(() => {
     // Reset room event
     socket.on('reset-room', (roomId) => {
       console.log(`🔄 Reset room requested for: ${roomId} by ${socket.id}`);
-      const game = gameRooms.get(roomId);
-      if (game) {
+      const oldGame = gameRooms.get(roomId);
+      if (oldGame) {
+        // Eski oyun nesnesindeki oyuncuların winnings değerlerini kaydet
+        const playerWinnings = new Map();
+        for (const [playerId, player] of oldGame.players) {
+          playerWinnings.set(playerId, {
+            name: player.name,
+            winnings: player.winnings || 0
+          });
+        }
+
         // Yeni oyun oluştur
-        const newGame = new BlackjackGame(roomId);
+        const newGame = new BlackjackGame(roomId, io);
         gameRooms.set(roomId, newGame);
 
-        console.log(`✅ Room ${roomId} reset successfully`);
+        // Eski oyuncuları yeni oyuna ekle ve winnings değerlerini geri yükle
+        for (const [playerId, playerData] of playerWinnings) {
+          newGame.addPlayer(playerId, playerData.name);
+          const newPlayer = newGame.players.get(playerId);
+          if (newPlayer) {
+            newPlayer.winnings = playerData.winnings;
+          }
+        }
+
+        console.log(`✅ Room ${roomId} reset successfully with preserved winnings`);
         io.to(roomId).emit('game-update', newGame.getGameState());
       } else {
         console.log(`❌ Room ${roomId} not found for reset`);
