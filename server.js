@@ -117,11 +117,6 @@ class BlackjackGame {
     this.dealer.isBlackjack = dealerScoreResult.isBlackjack;
     this.dealer.hiddenCard = true;
 
-    // If dealer has blackjack, reveal it immediately
-    if (this.dealer.isBlackjack) {
-      this.dealer.hiddenCard = false;
-    }
-
     this.currentPlayer = Array.from(this.players.keys())[0];
 
     // Find the first player who is still playing (not blackjack)
