@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useSocketGame } from '../lib/useSocketGame';
+import Scoreboard from './Scoreboard';
 
 interface Card {
   suit: string;
@@ -18,6 +19,7 @@ interface Player {
   bet: number;
   status: string;
   isBlackjack?: boolean;
+  winnings?: number;
 }
 
 interface GameState {
@@ -38,6 +40,7 @@ interface GameState {
     winners: Array<{ id: string; name: string; reason: string }>;
     losers: Array<{ id: string; name: string; reason: string }>;
     ties: Array<{ id: string; name: string; reason: string }>;
+    scoreboard?: Array<{ id: string; name: string; winnings: number; isDealer: boolean }>;
   } | null;
 }
 
@@ -253,7 +256,7 @@ export default function BlackjackGame() {
   }
 
   const isMyTurn = gameState.currentPlayer === socketId;
-  const currentPlayerData = gameState.players.find(p => p.id === socketId);
+  const currentPlayerData = gameState.players.find((p: Player) => p.id === socketId);
 
   console.log('🎮 Game State:', gameState);
   console.log('🎯 Is My Turn:', isMyTurn);
@@ -264,7 +267,15 @@ export default function BlackjackGame() {
   console.log('🎲 Current Player Blackjack:', currentPlayerData?.isBlackjack);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
+    <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4 relative">
+      {/* Scoreboard - Top Right Corner */}
+      <div className="absolute top-4 right-4 z-10 w-80">
+        <Scoreboard
+          scoreboard={(gameState?.results as any)?.scoreboard || []}
+          className="shadow-2xl"
+        />
+      </div>
+
       <div className="max-w-6xl mx-auto">
         {/* Back to Menu Button */}
         <div className="mb-4 flex gap-3">
@@ -298,7 +309,7 @@ export default function BlackjackGame() {
         <div className="bg-gradient-to-r from-red-900 to-red-800 p-6 rounded-xl mb-6 shadow-2xl border-4 border-yellow-400">
           <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KURPİYER</h2>
           <div className="flex justify-center flex-wrap relative">
-            {gameState.dealer.hand.map((card, index) => (
+            {gameState.dealer.hand.map((card: Card, index: number) => (
               <div
                 key={index}
                 className={`transition-transform duration-700 relative ${index === 1 && !gameState.dealer.hiddenCard ? 'animate-card-flip' : ''}`}
@@ -322,21 +333,21 @@ export default function BlackjackGame() {
 
         {/* Players */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {gameState.players.map((player) => {
+          {gameState.players.map((player: Player) => {
             // Determine player result for styling
             let resultStyle = '';
             let resultIcon = '';
             let resultText = '';
 
             if (gameState.gameState === 'finished' as string && gameState.results) {
-              const isWinner = gameState.results.winners.some(w => w.id === player.id);
-              const isLoser = gameState.results.losers.some(l => l.id === player.id);
-              const isTie = gameState.results.ties.some(t => t.id === player.id);
+              const isWinner = gameState.results.winners.some((w: { id: string; name: string; reason: string }) => w.id === player.id);
+              const isLoser = gameState.results.losers.some((l: { id: string; name: string; reason: string }) => l.id === player.id);
+              const isTie = gameState.results.ties.some((t: { id: string; name: string; reason: string }) => t.id === player.id);
 
               if (isWinner) {
                 resultStyle = 'border-green-500 bg-gradient-to-br from-green-100 to-green-200 ring-4 ring-green-300';
                 resultIcon = '🏆';
-                const winnerInfo = gameState.results.winners.find(w => w.id === player.id);
+                const winnerInfo = gameState.results.winners.find((w: { id: string; name: string; reason: string }) => w.id === player.id);
                 if (winnerInfo?.reason === 'blackjack') {
                   resultText = '🎉 BLACKJACK!';
                 } else {
@@ -345,7 +356,7 @@ export default function BlackjackGame() {
               } else if (isLoser) {
                 resultStyle = 'border-red-500 bg-gradient-to-br from-red-100 to-red-200 ring-4 ring-red-300';
                 resultIcon = '❌';
-                const loserInfo = gameState.results.losers.find(l => l.id === player.id);
+                const loserInfo = gameState.results.losers.find((l: { id: string; name: string; reason: string }) => l.id === player.id);
                 if (loserInfo?.reason === 'dealer_blackjack') {
                   resultText = 'Kurpiyer Blackjack!';
                 } else {
@@ -354,7 +365,7 @@ export default function BlackjackGame() {
               } else if (isTie) {
                 resultStyle = 'border-blue-500 bg-gradient-to-br from-blue-100 to-blue-200 ring-4 ring-blue-300';
                 resultIcon = '🤝';
-                const tieInfo = gameState.results.ties.find(t => t.id === player.id);
+                const tieInfo = gameState.results.ties.find((t: { id: string; name: string; reason: string }) => t.id === player.id);
                 if (tieInfo?.reason === 'blackjack_push') {
                   resultText = 'Blackjack Berabere!';
                 } else {
@@ -394,7 +405,7 @@ export default function BlackjackGame() {
                   </div>
                 )}
                 <div className="flex justify-center flex-wrap mb-4 relative">
-                  {player.hand.map((card, index) => (
+                  {player.hand.map((card: Card, index: number) => (
                     <div key={index} className="relative">
                       {renderCard(card)}
                       {player.isBlackjack && index === player.hand.length - 1 && (
@@ -412,6 +423,12 @@ export default function BlackjackGame() {
                       <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
                     )}
                   </div>
+                  {player.winnings !== undefined && player.winnings > 0 && (
+                    <div className="flex items-center justify-center space-x-1 mt-1">
+                      <span className="text-green-600 font-bold text-sm">💰 {player.winnings}</span>
+                      <span className="text-xs text-gray-500">puan</span>
+                    </div>
+                  )}
                   <p className="text-gray-600 capitalize font-medium">
                     {player.status === 'playing' && player.isBlackjack && '👑 BLACKJACK!'}
                     {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
@@ -563,10 +580,10 @@ export default function BlackjackGame() {
                     <div className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-2xl border-4 border-green-400 shadow-xl">
                       <h4 className="text-xl font-bold text-green-800 mb-3 text-center flex items-center justify-center">
                         <span className="text-2xl mr-2">🏆</span>
-                        {gameState.results.winners.some(w => w.reason === 'blackjack') ? 'BLACKJACK KAZANAN!' : 'KAZANAN'}
+                        {gameState.results.winners.some((w: { id: string; name: string; reason: string }) => w.reason === 'blackjack') ? 'BLACKJACK KAZANAN!' : 'KAZANAN'}
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.winners.map((winner) => {
+                        {gameState.results.winners.map((winner: { id: string; name: string; reason: string }) => {
                           console.log('Winner:', winner.name, 'Reason:', winner.reason);
                           return (
                           <div key={winner.id} className="bg-white p-3 rounded-lg border-2 border-green-300 shadow-sm">
@@ -594,7 +611,7 @@ export default function BlackjackGame() {
                         KAYBEDEN
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.losers.map((loser) => (
+                        {gameState.results.losers.map((loser: { id: string; name: string; reason: string }) => (
                           <div key={loser.id} className="bg-white p-3 rounded-lg border-2 border-red-300 shadow-sm">
                             <div className="font-bold text-sm text-red-900">{loser.name}</div>
                             <div className="text-red-700 text-xs mt-1 text-center">
@@ -616,7 +633,7 @@ export default function BlackjackGame() {
                         BERABERE
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.ties.map((tie) => (
+                        {gameState.results.ties.map((tie: { id: string; name: string; reason: string }) => (
                           <div key={tie.id} className="bg-white p-3 rounded-lg border-2 border-blue-300 shadow-sm">
                             <div className="font-bold text-sm text-blue-900 flex items-center justify-center">
                               {tie.name}
@@ -632,6 +649,52 @@ export default function BlackjackGame() {
                     </div>
                   )}
                 </div>
+
+                {/* Current Scores Display */}
+                {(gameState.results as any)?.scoreboard && (gameState.results as any)?.scoreboard.length > 0 && (
+                  <div className="mt-8 p-6 bg-gradient-to-br from-purple-900 via-purple-800 to-purple-900 rounded-2xl border-4 border-purple-400 shadow-2xl">
+                    <h3 className="text-2xl font-bold text-purple-300 mb-4 text-center flex items-center justify-center">
+                      <span className="text-3xl mr-3">💰</span>
+                      GÜNCEL SKORLAR
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {(gameState.results as any)?.scoreboard!.map((entry: { id: string; name: string; winnings: number; isDealer: boolean }, index: number) => (
+                        <div
+                          key={entry.id}
+                          className={`p-4 rounded-xl border-2 text-center transition-all duration-300 ${
+                            entry.isDealer
+                              ? 'bg-gradient-to-r from-red-800 to-red-700 border-red-500'
+                              : index === 0 && (gameState.results as any)?.scoreboard!.length > 1
+                                ? 'bg-gradient-to-r from-yellow-800 to-yellow-700 border-yellow-500 animate-pulse'
+                                : 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-500'
+                          }`}
+                        >
+                          <div className={`text-lg font-bold mb-2 ${
+                            entry.isDealer ? 'text-red-300' : 'text-white'
+                          }`}>
+                            {entry.name}
+                          </div>
+                          <div className="flex items-center justify-center space-x-2">
+                            <span className={`text-2xl font-bold ${
+                              entry.isDealer ? 'text-red-400' : 'text-green-400'
+                            }`}>
+                              {entry.winnings}
+                            </span>
+                            <span className="text-yellow-400 text-xl">💰</span>
+                          </div>
+                          {index === 0 && (gameState.results as any)?.scoreboard!.length > 1 && !entry.isDealer && (
+                            <div className="text-yellow-300 text-sm font-bold mt-1">👑 Lider</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 text-center">
+                      <p className="text-purple-200 text-sm">
+                        🎯 Blackjack: 2 puan • 🏆 Normal kazanma: 1 puan
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">

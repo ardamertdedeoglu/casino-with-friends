@@ -87,7 +87,8 @@ class BlackjackGame {
       score: 0,
       bet: 0,
       status: 'playing',
-      isBlackjack: false
+      isBlackjack: false,
+      winnings: 0 // Track total winnings across games
     });
   }
 
@@ -284,8 +285,12 @@ class BlackjackGame {
       dealerBlackjack: this.dealer.isBlackjack,
       winners: [],
       losers: [],
-      ties: []
+      ties: [],
+      scoreboard: [] // Add scoreboard data
     };
+
+    // Track dealer wins for scoreboard
+    let dealerWins = 0;
 
     for (const [playerId, player] of this.players) {
       // Player already busted
@@ -295,6 +300,7 @@ class BlackjackGame {
           name: player.name,
           reason: 'busted'
         });
+        dealerWins++; // Dealer wins when player busts
       }
       // Player has blackjack
       else if (player.isBlackjack) {
@@ -305,6 +311,7 @@ class BlackjackGame {
             name: player.name,
             reason: 'blackjack_push'
           });
+          // No winner for this round
         } else {
           // Player blackjack wins
           results.winners.push({
@@ -312,6 +319,7 @@ class BlackjackGame {
             name: player.name,
             reason: 'blackjack'
           });
+          player.winnings += 2; // Blackjack pays 2:1
         }
       }
       // Dealer has blackjack
@@ -321,6 +329,7 @@ class BlackjackGame {
           name: player.name,
           reason: 'dealer_blackjack'
         });
+        dealerWins++; // Dealer wins with blackjack
       }
       // Dealer busted
       else if (this.dealer.score > 21) {
@@ -329,6 +338,7 @@ class BlackjackGame {
           name: player.name,
           reason: 'dealer_busted'
         });
+        player.winnings += 1; // Regular win pays 1:1
       }
       // Compare scores
       else if (player.score > this.dealer.score) {
@@ -337,20 +347,48 @@ class BlackjackGame {
           name: player.name,
           reason: 'higher_score'
         });
+        player.winnings += 1; // Regular win pays 1:1
       } else if (player.score < this.dealer.score) {
         results.losers.push({
           id: playerId,
           name: player.name,
           reason: 'lower_score'
         });
+        dealerWins++; // Dealer wins with higher score
       } else {
         results.ties.push({
           id: playerId,
           name: player.name,
           reason: 'tie'
         });
+        // Ties don't affect winnings
       }
     }
+
+    // Add dealer to scoreboard if they won
+    if (dealerWins > 0) {
+      results.scoreboard.push({
+        id: 'dealer',
+        name: '🏠 Kurpiyer',
+        winnings: dealerWins,
+        isDealer: true
+      });
+    }
+
+    // Add players to scoreboard
+    for (const [playerId, player] of this.players) {
+      if (player.winnings > 0) {
+        results.scoreboard.push({
+          id: playerId,
+          name: player.name,
+          winnings: player.winnings,
+          isDealer: false
+        });
+      }
+    }
+
+    // Sort scoreboard by winnings (highest first)
+    results.scoreboard.sort((a, b) => b.winnings - a.winnings);
 
     this.results = results;
   }
