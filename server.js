@@ -67,8 +67,8 @@ class BlackjackGame {
       aces--;
     }
 
-    // Check for blackjack (21 with exactly 2 cards)
-    if (score === 21 && hand.length === 2) {
+    // Check for blackjack (21 with any number of cards)
+    if (score === 21) {
       isBlackjack = true;
     }
 
