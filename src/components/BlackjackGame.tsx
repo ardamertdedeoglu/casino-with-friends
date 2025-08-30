@@ -280,7 +280,26 @@ export default function BlackjackGame() {
       {/* Scoreboard - Top Right Corner */}
       <div className="absolute top-4 right-4 z-10 w-80">
         <Scoreboard
-          scoreboard={(gameState?.results as GameResults)?.scoreboard || []}
+          scoreboard={(() => {
+            // Oyun sonucu varsa oradan al, yoksa oyuncuların winnings değerlerinden oluştur
+            if (gameState?.results?.scoreboard && gameState.results.scoreboard.length > 0) {
+              return gameState.results.scoreboard;
+            } else if (gameState?.players) {
+              // Oyuncuların winnings değerlerinden scoreboard oluştur
+              const scoreboardFromPlayers = gameState.players
+                .filter((player: Player) => (player.winnings || 0) > 0)
+                .map((player: Player) => ({
+                  id: player.id,
+                  name: player.name,
+                  winnings: player.winnings || 0,
+                  isDealer: false
+                }))
+                .sort((a, b) => b.winnings - a.winnings);
+
+              return scoreboardFromPlayers;
+            }
+            return [];
+          })()}
           className="shadow-2xl"
         />
       </div>
