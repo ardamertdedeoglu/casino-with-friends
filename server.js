@@ -590,6 +590,20 @@ app.prepare().then(() => {
         console.log(`❌ Room ${roomId} not found for reset`);
       }
     });
+
+    // Chat message event
+    socket.on('chat-message', (data) => {
+      const { roomId, message, playerName } = data;
+      console.log(`💬 Chat message from ${playerName} in room ${roomId}: ${message}`);
+      
+      // Send message to all players in the room
+      io.to(roomId).emit('chat-message', {
+        id: socket.id,
+        name: playerName,
+        message: message,
+        timestamp: Date.now()
+      });
+    });
   });
 
   httpServer.listen(port, (err) => {

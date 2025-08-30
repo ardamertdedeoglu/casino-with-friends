@@ -32,7 +32,7 @@ interface GameState {
   } | null;
 }
 
-export const useSocketGame = (roomId: string, playerName: string, joined: boolean = false) => {
+export const useSocketGame = (roomId: string, playerName: string, joined: boolean = false, onChatMessage?: (message: any) => void) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -127,12 +127,20 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
       console.error('🚨 Socket.IO reconnection failed');
     });
 
+    // Chat message listener
+    socket.on('chat-message', (message) => {
+      console.log('💬 Received chat message:', message);
+      if (onChatMessage) {
+        onChatMessage(message);
+      }
+    });
+
     return () => {
       console.log('🧹 Cleaning up Socket.IO connection');
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [roomId, playerName, joined]);
+  }, [roomId, playerName, joined, onChatMessage]);
 
   // Oyuna katıl (artık socket connect event'i tarafından otomatik yapılıyor)
   const joinGame = useCallback(async (playerId: string) => {
@@ -225,6 +233,20 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
     // Bu özellik Socket.IO server'ında implement edilmemiş
   }, []);
 
+  // Chat mesajı gönder
+  const sendChatMessage = useCallback(async (message: string) => {
+    if (socketRef.current && isConnected && roomId && playerName) {
+      console.log('📤 Sending chat message:', message);
+      socketRef.current.emit('chat-message', {
+        roomId,
+        message,
+        playerName
+      });
+    } else {
+      console.error('❌ Cannot send chat message - socket not connected or missing data');
+    }
+  }, [isConnected, roomId, playerName]);
+
   return {
     gameState,
     isConnected,
@@ -237,6 +259,7 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
     restartGame,
     leaveGame,
     resetRoom,
-    changeName
+    changeName,
+    sendChatMessage
   };
 };
