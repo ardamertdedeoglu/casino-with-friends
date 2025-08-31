@@ -36,13 +36,6 @@ interface ScoreboardEntry {
   isDealer: boolean;
 }
 
-interface ChatMessage {
-  id: string;
-  name: string;
-  message: string;
-  timestamp: number;
-}
-
 interface GameResults {
   dealerBusted: boolean;
   dealerBlackjack?: boolean;
@@ -64,8 +57,14 @@ export default function BlackjackGame() {
   const [chatInput, setChatInput] = useState('');
   const [showChat, setShowChat] = useState(false);
 
+  // Ref for chat messages container to auto-scroll
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
+
   // Ref to store sendChatMessage function
   const sendChatMessageRef = useRef<((message: string) => void) | null>(null);
+
+  // Ref for turn notification sound
+  const turnSoundRef = useRef<HTMLAudioElement | null>(null);
 
   // Handle incoming chat messages
   const handleChatMessage = useCallback((message: ChatMessage) => {
@@ -87,12 +86,23 @@ export default function BlackjackGame() {
 
   const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error, sendChatMessage } = useSocketGame(roomId, playerName, joined, handleChatMessage);
 
+  // Calculate turn status before any conditional logic
+  const isMyTurn = gameState ? gameState.currentPlayer === socketId : false;
+  const currentPlayerData = gameState ? gameState.players.find((p: Player) => p.id === socketId) : null;
+
   // Update sendChatMessage ref when it's available
   useEffect(() => {
     if (sendChatMessage) {
       sendChatMessageRef.current = sendChatMessage;
     }
   }, [sendChatMessage]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   // Game state değiştiğinde loading'i kapat
   useEffect(() => {
@@ -105,7 +115,14 @@ export default function BlackjackGame() {
     }
   }, [gameState, isLoading]);
 
-  // Component unmount olduğunda player'ı odadan çıkar - kaldırıldı çünkü sorun yaratıyor
+  // Play turn notification sound when it's player's turn
+  useEffect(() => {
+    if (isMyTurn && turnSoundRef.current && gameState?.gameState === 'playing') {
+      turnSoundRef.current.play().catch(err => {
+        console.log('Ses çalma hatası:', err);
+      });
+    }
+  }, [isMyTurn, gameState?.gameState]);
 
   const handleLeaveGame = async () => {
     if (playerId && roomId) {
@@ -294,9 +311,6 @@ export default function BlackjackGame() {
       </div>
     );
   }
-
-  const isMyTurn = gameState.currentPlayer === socketId;
-  const currentPlayerData = gameState.players.find((p: Player) => p.id === socketId);
 
   const copyInviteLink = async () => {
     const currentUrl = window.location.href;
@@ -650,7 +664,7 @@ export default function BlackjackGame() {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
+            <div ref={chatMessagesRef} className="flex-1 p-4 overflow-y-auto space-y-3">
               {chatMessages.length === 0 ? (
                 <div className="text-center text-gray-400 text-sm">
                   <p>Henüz mesaj yok</p>
@@ -909,6 +923,14 @@ export default function BlackjackGame() {
           </>
         )}
       </div>
+
+      {/* Hidden audio element for turn notification */}
+      <audio
+        ref={turnSoundRef}
+        src="/guitar-riff.wav"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 }
