@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useSocketGame } from '../lib/useSocketGame';
 
 interface ChatMessage {
   id: string;
@@ -22,8 +22,6 @@ export default function ChatComponent({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [showChat, setShowChat] = useState(false);
-  const [socketId, setSocketId] = useState<string>('');
-  const socketRef = useRef<Socket | null>(null);
 
   // Ref for chat messages container to auto-scroll
   const chatMessagesRef = useRef<HTMLDivElement>(null);
@@ -34,69 +32,8 @@ export default function ChatComponent({
     setChatMessages(prev => [...prev, message]);
   }, []);
 
-  // Initialize socket connection for chat
-  useEffect(() => {
-    if (!roomId || !playerName) return;
-
-    console.log('🔌 Initializing chat socket connection...');
-
-    const socket = io(process.env.NODE_ENV === 'production'
-      ? process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app"
-      : "http://localhost:3000", {
-      transports: ['websocket', 'polling'],
-      upgrade: true,
-      rememberUpgrade: true,
-      timeout: 20000,
-    });
-
-    socketRef.current = socket;
-
-    // Join room for chat
-    socket.emit('joinRoom', { roomId, playerName });
-
-    // Set socket ID
-    socket.on('connect', () => {
-      console.log('📡 Chat socket connected:', socket.id);
-      setSocketId(socket.id || '');
-    });
-
-    // Listen for chat messages
-    socket.on('chatMessage', handleChatMessage);
-
-    // Listen for room updates to get current players
-    socket.on('roomUpdate', (data) => {
-      console.log('🏠 Room updated for chat:', data);
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('📡 Chat socket disconnected');
-    });
-
-    return () => {
-      console.log('🔌 Cleaning up chat socket connection...');
-      socket.off('chatMessage', handleChatMessage);
-      socket.disconnect();
-    };
-  }, [roomId, playerName]);
-
-  // Send chat message function
-  const sendChatMessage = useCallback((message: string) => {
-    if (socketRef.current && message.trim()) {
-      console.log('📤 Sending chat message:', message);
-      socketRef.current.emit('sendChatMessage', {
-        roomId,
-        message: message.trim(),
-        playerName,
-        timestamp: Date.now()
-      });
-    }
-  }, [roomId, playerName]);
-
-  // Set up chat message listener
-  useEffect(() => {
-    // Chat mesajları artık socket bağlantısı içinde dinleniyor
-  }, []);
+  // Use the existing socket game hook for chat functionality
+  const { sendChatMessage, socketId } = useSocketGame(roomId, playerName, true, handleChatMessage);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
