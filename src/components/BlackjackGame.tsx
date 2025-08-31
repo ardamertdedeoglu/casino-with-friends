@@ -47,9 +47,20 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [soundVolume, setSoundVolume] = useState(70); // Default volume 70%
+  const [isMuted, setIsMuted] = useState(false);
 
   // Ref for turn notification sound
   const turnSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  // Ref for blackjack sound
+  const blackjackSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  // Ref to track which players have already played blackjack sound
+  const playedBlackjackSoundRef = useRef<Set<string>>(new Set());
+
+  // Ref to prevent turn sound during blackjack sound
+  const isBlackjackSoundPlayingRef = useRef(false);
 
   const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
 
@@ -68,14 +79,80 @@ export default function BlackjackGame() {
     }
   }, [gameState, isLoading]);
 
-  // Play turn notification sound when it's player's turn
+  // Load sound volume from localStorage on component mount
   useEffect(() => {
-    if (isMyTurn && turnSoundRef.current && gameState?.gameState === 'playing') {
+    const savedVolume = localStorage.getItem('blackjack-sound-volume');
+    if (savedVolume !== null) {
+      const volume = parseInt(savedVolume, 10);
+      if (volume >= 1 && volume <= 100) {
+        setSoundVolume(volume);
+      }
+    }
+  }, []);
+
+  // Update audio volume when soundVolume or isMuted changes
+  useEffect(() => {
+    const effectiveVolume = isMuted ? 0 : soundVolume / 100;
+    if (turnSoundRef.current) {
+      turnSoundRef.current.volume = effectiveVolume;
+    }
+    if (blackjackSoundRef.current) {
+      blackjackSoundRef.current.volume = effectiveVolume;
+    }
+  }, [soundVolume, isMuted]);
+
+  // Play turn notification sound when it's player's turn (but not during blackjack sound)
+  useEffect(() => {
+    if (isMyTurn && turnSoundRef.current && gameState?.gameState === 'playing' && !isBlackjackSoundPlayingRef.current) {
+      console.log('🎯 Playing turn sound for current player');
       turnSoundRef.current.play().catch(err => {
         console.log('Ses çalma hatası:', err);
       });
+    } else if (isMyTurn && isBlackjackSoundPlayingRef.current) {
+      console.log('🎯 Turn sound blocked - blackjack sound is playing');
     }
   }, [isMyTurn, gameState?.gameState]);
+
+  // Play blackjack sound when any player gets blackjack (except dealer)
+  useEffect(() => {
+    if (gameState?.players && blackjackSoundRef.current) {
+      gameState.players.forEach(player => {
+        // Check if player has blackjack and we haven't played sound for them yet
+        if (player.isBlackjack && player.id !== 'dealer' && !playedBlackjackSoundRef.current.has(player.id)) {
+          console.log(`🎉 Blackjack detected for ${player.name}! Playing blackjack sound...`);
+          playedBlackjackSoundRef.current.add(player.id); // Mark as played
+          isBlackjackSoundPlayingRef.current = true; // Prevent turn sound
+
+          const audioElement = blackjackSoundRef.current;
+          if (audioElement) {
+            audioElement.currentTime = 0; // Reset to beginning
+
+            // Add a small delay to ensure audio is ready
+            setTimeout(() => {
+              audioElement.play().then(() => {
+                console.log(`🎵 Blackjack sound started playing for ${player.name}`);
+              }).catch(err => {
+                console.log('Blackjack ses çalma hatası:', err);
+                playedBlackjackSoundRef.current.delete(player.id); // Remove from played set on error
+                isBlackjackSoundPlayingRef.current = false; // Allow turn sound
+              });
+
+              // Wait for blackjack sound to finish, then allow turn to pass
+              audioElement.onended = () => {
+                console.log(`🎵 Blackjack sound finished for ${player.name}`);
+                isBlackjackSoundPlayingRef.current = false; // Allow turn sound
+
+                // Add extra delay after sound ends to prevent immediate turn sound
+                setTimeout(() => {
+                  console.log(`🎵 Extra delay finished for ${player.name}, turn sound can now play`);
+                }, 500);
+              };
+            }, 100);
+          }
+        }
+      });
+    }
+  }, [gameState?.players]);
 
   const handleLeaveGame = async () => {
     if (playerId && roomId) {
@@ -292,6 +369,28 @@ export default function BlackjackGame() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4 relative">
+      {/* Custom CSS for slider */}
+      <style jsx>{`
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #fbbf24;
+          cursor: pointer;
+          border: 2px solid #f59e0b;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .slider::-moz-range-thumb {
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #fbbf24;
+          cursor: pointer;
+          border: 2px solid #f59e0b;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+      `}</style>
       {/* Invite Button - Top Left Corner (only when waiting) */}
       {gameState?.gameState === 'waiting' && (
         <div className="absolute top-4 left-4 z-10">
@@ -330,6 +429,42 @@ export default function BlackjackGame() {
           })()}
           className="shadow-2xl"
         />
+
+        {/* Sound Volume Slider */}
+        <div className="mt-4 bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-2xl border-2 border-gray-600">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className="text-yellow-400 text-lg hover:text-yellow-300 transition-colors duration-200 p-1"
+              title={isMuted ? "Sesi aç" : "Sesi kapat"}
+            >
+              {isMuted ? "🔇" : "🔊"}
+            </button>
+            <div className="flex-1">
+              <label className="block text-sm font-bold text-white mb-2">Ses Seviyesi</label>
+              <input
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                value={soundVolume}
+                onChange={(e) => setSoundVolume(parseInt(e.target.value, 10))}
+                disabled={isMuted}
+                className={`w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-opacity duration-200 ${isMuted ? 'opacity-50' : 'opacity-100'}`}
+                style={{
+                  background: `linear-gradient(to right, #fbbf24 0%, #fbbf24 ${soundVolume}%, #374151 ${soundVolume}%, #374151 100%)`
+                }}
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>1%</span>
+                <span className={`font-bold ${isMuted ? 'text-gray-500' : 'text-yellow-400'}`}>
+                  {isMuted ? 'Sessiz' : `${soundVolume}%`}
+                </span>
+                <span>100%</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto">
@@ -414,7 +549,7 @@ export default function BlackjackGame() {
                 resultIcon = '❌';
                 const loserInfo = gameState.results.losers.find((l: { id: string; name: string; reason: string }) => l.id === player.id);
                 if (loserInfo?.reason === 'dealer_blackjack') {
-                  resultText = 'Kurpiyer Blackjack!';
+                  resultText = 'Krupiyer Blackjack!';
                 } else {
                   resultText = 'Kaybettin!';
                 }
@@ -632,7 +767,7 @@ export default function BlackjackGame() {
                     {gameState.dealer.isBlackjack && (
                       <div className="animate-pulse mb-4">
                         <p className="text-yellow-400 font-bold text-3xl mb-2">🎊 BLACKJACK!</p>
-                        <p className="text-yellow-200 text-lg">Kurpiyer 21 yaptı!</p>
+                        <p className="text-yellow-200 text-lg">Krupiyer 21 yaptı!</p>
                       </div>
                     )}
                     {gameState.results.dealerBusted && (
@@ -665,7 +800,7 @@ export default function BlackjackGame() {
                               {winner.reason === 'blackjack' && <span className="ml-2 text-yellow-600 text-lg animate-pulse">♠♥</span>}
                             </div>
                             <div className="text-green-700 text-xs mt-1 text-center font-bold">
-                              {winner.reason === 'dealer_busted' && '🎉 Kurpiyer Battı!'}
+                              {winner.reason === 'dealer_busted' && '🎉 Krupiyer Battı!'}
                               {winner.reason === 'higher_score' && '📈 Yüksek Skor!'}
                               {winner.reason === 'blackjack' && '🎊 BLACKJACK!'}
                             </div>
@@ -690,7 +825,7 @@ export default function BlackjackGame() {
                             <div className="text-red-700 text-xs mt-1 text-center">
                               {loser.reason === 'busted' && '💥 Battı!'}
                               {loser.reason === 'lower_score' && '📉 Düşük Skor!'}
-                              {loser.reason === 'dealer_blackjack' && '🏠 Kurpiyer Blackjack!'}
+                              {loser.reason === 'dealer_blackjack' && '🏠 Krupiyer Blackjack!'}
                             </div>
                           </div>
                         ))}
@@ -807,6 +942,14 @@ export default function BlackjackGame() {
       <audio
         ref={turnSoundRef}
         src="/guitar-riff.wav"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden audio element for blackjack sound */}
+      <audio
+        ref={blackjackSoundRef}
+        src="/blackjack.wav"
         preload="auto"
         style={{ display: 'none' }}
       />

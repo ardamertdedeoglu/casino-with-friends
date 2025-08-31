@@ -129,7 +129,6 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
 
     // Chat message listener
     socket.on('chat-message', (message) => {
-      console.log('💬 Received chat message:', message);
       if (onChatMessage) {
         onChatMessage(message);
       }

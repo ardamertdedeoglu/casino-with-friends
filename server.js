@@ -374,7 +374,7 @@ class BlackjackGame {
     if (dealerWins > 0) {
       results.scoreboard.push({
         id: 'dealer',
-        name: '🏠 Kurpiyer',
+        name: '🏠 Krupiyer',
         winnings: dealerWins,
         isDealer: true
       });
