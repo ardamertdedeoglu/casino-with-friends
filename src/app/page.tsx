@@ -102,9 +102,9 @@ export default function Home() {
           {/* Roulette - Coming Soon */}
           <div className="bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 p-8 rounded-3xl shadow-2xl border-4 border-gray-400 opacity-75">
             <div className="text-center">
-              <div className="text-8xl mb-4 text-gray-500">🎡</div>
-              <h2 className="text-3xl font-bold text-gray-600 mb-2">ROULETTE</h2>
-              <p className="text-gray-500 mb-4">Çarkı çevir, kazan!</p>
+              <div className="text-8xl mb-4 text-gray-500">🎭</div>
+              <h2 className="text-3xl font-bold text-gray-600 mb-2">BLÖF</h2>
+              <p className="text-gray-500 mb-4">En iyi yalan söyleyen kazanır!</p>
               <div className="bg-gray-500 text-white px-6 py-3 rounded-full font-bold text-lg">
                 YAKINDA
               </div>

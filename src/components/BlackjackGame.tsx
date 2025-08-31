@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useSocketGame } from '../lib/useSocketGame';
 import Scoreboard from './Scoreboard';
+import ChatComponent from './ChatComponent';
 
 interface Card {
   suit: string;
@@ -20,13 +21,6 @@ interface Player {
   status: string;
   isBlackjack?: boolean;
   winnings?: number;
-}
-
-interface ChatMessage {
-  id: string;
-  name: string;
-  message: string;
-  timestamp: number;
 }
 
 interface ScoreboardEntry {
@@ -53,56 +47,15 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [showChat, setShowChat] = useState(false);
-
-  // Ref for chat messages container to auto-scroll
-  const chatMessagesRef = useRef<HTMLDivElement>(null);
-
-  // Ref to store sendChatMessage function
-  const sendChatMessageRef = useRef<((message: string) => void) | null>(null);
 
   // Ref for turn notification sound
   const turnSoundRef = useRef<HTMLAudioElement | null>(null);
 
-  // Handle incoming chat messages
-  const handleChatMessage = useCallback((message: ChatMessage) => {
-    console.log('💬 Received chat message:', message);
-    setChatMessages(prev => [...prev, message]);
-  }, []);
-
-  // Handle Enter key press for chat input
-  const handleChatKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const trimmedMessage = chatInput.trim();
-      if (trimmedMessage && sendChatMessageRef.current) {
-        sendChatMessageRef.current(trimmedMessage);
-        setChatInput('');
-      }
-    }
-  }, [chatInput]);
-
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error, sendChatMessage } = useSocketGame(roomId, playerName, joined, handleChatMessage);
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
 
   // Calculate turn status before any conditional logic
   const isMyTurn = gameState ? gameState.currentPlayer === socketId : false;
   const currentPlayerData = gameState ? gameState.players.find((p: Player) => p.id === socketId) : null;
-
-  // Update sendChatMessage ref when it's available
-  useEffect(() => {
-    if (sendChatMessage) {
-      sendChatMessageRef.current = sendChatMessage;
-    }
-  }, [sendChatMessage]);
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (chatMessagesRef.current) {
-      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
-    }
-  }, [chatMessages]);
 
   // Game state değiştiğinde loading'i kapat
   useEffect(() => {
@@ -645,85 +598,11 @@ export default function BlackjackGame() {
           </div>
         )}
 
-        {/* Chat Toggle Button - Bottom Right */}
-        <div className="fixed bottom-4 right-4 z-30">
-          <button
-            onClick={() => setShowChat(!showChat)}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 border-2 border-blue-500"
-          >
-            <span className="text-2xl">💬</span>
-          </button>
-        </div>
-
-        {/* Chat Panel */}
-        {showChat && (
-          <div className="fixed bottom-20 right-4 w-80 h-[700px] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl border-2 border-gray-600 z-40 flex flex-col">
-            {/* Chat Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 rounded-t-2xl border-b-2 border-blue-500">
-              <h3 className="text-white font-bold text-lg text-center">💬 Sohbet</h3>
-            </div>
-
-            {/* Messages Area */}
-            <div ref={chatMessagesRef} className="flex-1 p-4 overflow-y-auto space-y-3">
-              {chatMessages.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm">
-                  <p>Henüz mesaj yok</p>
-                  <p>İlk mesajı sen gönder! 🎯</p>
-                </div>
-              ) : (
-                chatMessages.map((msg, index) => (
-                  <div key={index} className="space-y-1">
-                    {/* Player Name */}
-                    <div className={`text-xs font-bold px-2 py-1 rounded-full inline-block ${
-                      msg.id === socketId
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-600 text-gray-200'
-                    }`}>
-                      {msg.name}
-                    </div>
-                    {/* Message Bubble */}
-                    <div className={`p-3 rounded-2xl w-fit max-w-[70%] ${
-                      msg.id === socketId
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-100'
-                    }`}>
-                      <p className="text-sm break-words">{msg.message}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Input Area */}
-            <div className="p-4 border-t-2 border-gray-600">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value.slice(0, 100))}
-                  onKeyPress={handleChatKeyPress}
-                  placeholder="Mesajınızı yazın..."
-                  maxLength={100}
-                  className="flex-1 p-3 rounded-xl bg-gray-800 text-white placeholder-gray-400 border-2 border-gray-600 focus:border-blue-500 focus:outline-none transition-all duration-200"
-                />
-                <button
-                  onClick={() => {
-                    const trimmedMessage = chatInput.trim();
-                    if (trimmedMessage) {
-                      sendChatMessage(trimmedMessage);
-                      setChatInput('');
-                    }
-                  }}
-                  disabled={!chatInput.trim()}
-                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-3 rounded-xl font-bold hover:from-green-700 hover:to-green-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-200 border-2 border-green-500"
-                >
-                  <span className="text-lg">📤</span>
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">{chatInput.length}/100 karakter</p>
-            </div>
-          </div>
-        )}
+        {/* Chat Component */}
+        <ChatComponent
+          roomId={roomId}
+          playerName={playerName}
+        />
 
         {gameState.gameState === 'finished' as string && gameState.results && (
           <>
