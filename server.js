@@ -88,6 +88,7 @@ class BlackjackGame {
       bet: 0,
       status: 'playing',
       isBlackjack: false,
+      hasDoubledDown: false,
       winnings: 0 // Track total winnings across games
     });
   }
@@ -97,6 +98,17 @@ class BlackjackGame {
     this.results = null;
 
     this.deck = this.createDeck();
+
+    // Copy bet amounts from playerBets to player objects
+    if (this.playerBets) {
+      for (const [playerId, betInfo] of this.playerBets) {
+        const player = this.players.get(playerId);
+        if (player && betInfo.hasBet) {
+          player.bet = betInfo.amount;
+          console.log(`💰 Set bet for player ${playerId} (${player.name}): ${player.bet}`);
+        }
+      }
+    }
 
     for (const [playerId, player] of this.players) {
       player.status = 'playing';
@@ -168,6 +180,38 @@ class BlackjackGame {
       console.log(`🛑 Player ${playerId} (${player.name}) stood with score: ${player.score}`);
       this.nextPlayer();
     }
+  }
+
+  doubleDown(playerId) {
+    const player = this.players.get(playerId);
+    if (player && player.status === 'playing' && player.hand.length === 2 && !player.hasDoubledDown) {
+      // Bahsi ikiye katla
+      player.bet *= 2;
+      player.hasDoubledDown = true;
+      
+      console.log(`🎰 Player ${playerId} (${player.name}) doubled down! New bet: ${player.bet}`);
+      
+      // Bir kart dağıt
+      player.hand.push(this.deck.pop());
+      const scoreResult = this.calculateScore(player.hand);
+      player.score = scoreResult.score;
+      player.isBlackjack = scoreResult.isBlackjack;
+      
+      console.log(`📇 Player ${playerId} (${player.name}) drew a card. New score: ${player.score}`);
+      
+      // Eğer 21'i aştıysa bust, değilse otomatik stand
+      if (player.score > 21) {
+        player.status = 'bust';
+        console.log(`💥 Player ${playerId} (${player.name}) busted after double down!`);
+      } else {
+        player.status = 'stood';
+        console.log(`🛑 Player ${playerId} (${player.name}) automatically stood after double down.`);
+      }
+      
+      this.nextPlayer();
+      return true;
+    }
+    return false;
   }
 
   nextPlayer() {
@@ -298,14 +342,23 @@ class BlackjackGame {
     let dealerWins = 0;
 
     for (const [playerId, player] of this.players) {
-      // Player already busted
-      if (player.status === 'busted') {
+      // Özel durum: Hem oyuncu hem dealer bust olduysa - tie (para geri verilir)
+      if (player.status === 'busted' && this.dealer.score > 21) {
+        results.ties.push({
+          id: playerId,
+          name: player.name,
+          reason: 'both_busted'
+        });
+        // Bu durumda ne dealer ne de oyuncu kazanır
+      }
+      // Player already busted (dealer bust olmadı)
+      else if (player.status === 'busted') {
         results.losers.push({
           id: playerId,
           name: player.name,
           reason: 'busted'
         });
-        dealerWins++; // Dealer wins when player busts
+        dealerWins++; // Dealer wins when player busts (and dealer doesn't bust)
       }
       // Player has blackjack
       else if (player.isBlackjack) {
@@ -529,6 +582,23 @@ app.prepare().then(() => {
         console.log(`📤 Stand processed in room ${roomId}, new current player: ${game.currentPlayer}`);
       } else {
         console.log(`❌ Stand failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
+      }
+    });
+
+    socket.on('double-down', (roomId) => {
+      console.log(`🎰 Double down event received from ${socket.id} in room ${roomId}`);
+      const game = gameRooms.get(roomId);
+      if (game && game.currentPlayer === socket.id) {
+        const success = game.doubleDown(socket.id);
+        if (success) {
+          console.log(`✅ Double down processed for player ${socket.id}`);
+          io.to(roomId).emit('game-update', game.getGameState());
+          console.log(`📤 Double down processed in room ${roomId}, new current player: ${game.currentPlayer}`);
+        } else {
+          console.log(`❌ Double down failed - conditions not met for player ${socket.id}`);
+        }
+      } else {
+        console.log(`❌ Double down failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
       }
     });
 

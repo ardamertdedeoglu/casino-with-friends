@@ -37,6 +37,7 @@ interface VirtualCurrencyContextType {
   placeBet: (roomId: string, amount: number) => Promise<string | null>;
   processWin: (roomId: string, sessionId: string, winType: 'normal' | 'blackjack') => Promise<boolean>;
   processLoss: (roomId: string, sessionId: string) => Promise<boolean>;
+  processTie: (roomId: string, sessionId: string) => Promise<boolean>;
   getGameRoom: (roomId: string, gameType: string) => Promise<GameRoom | null>;
   getUserTransactions: (limit?: number) => Promise<ChipTransaction[]>;
   refreshProfile: () => Promise<void>;
@@ -406,6 +407,91 @@ export function VirtualCurrencyProvider({ children }: { children: React.ReactNod
     }
   };
 
+  // Berabere durumunda bahis geri verme işlemi
+  const processTie = async (roomId: string, sessionId: string): Promise<boolean> => {
+    if (!user || !userProfile) return false;
+
+    try {
+      // Oyun seansını al
+      const { data: session, error: sessionError } = await supabase
+        .from('game_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+
+      if (sessionError) throw sessionError;
+
+      // Kullanıcının chiplerini geri ver
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ 
+          chips: session.chips_before, // Bahis öncesi chip miktarına geri dön
+          games_played: userProfile.games_played + 1
+        })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Oyun seansını güncelle
+      const { error: updateSessionError } = await supabase
+        .from('game_sessions')
+        .update({
+          result: 'tie',
+          payout: session.bet_amount // Bahis miktarı geri verildi
+        })
+        .eq('id', sessionId);
+
+      if (updateSessionError) throw updateSessionError;
+
+      // Kasa chiplerini değiştirme - çünkü ne kazandı ne kaybetti
+      // Bahis kasa tarafından alınmış olabilir, o yüzden geri ver
+      const { data: roomData, error: getRoomError } = await supabase
+        .from('game_rooms')
+        .select('house_chips')
+        .eq('id', roomId)
+        .single();
+
+      if (getRoomError) throw getRoomError;
+
+      // Eğer kasa bu bahisi almışsa geri ver
+      const { error: houseError } = await supabase
+        .from('game_rooms')
+        .update({
+          house_chips: roomData.house_chips // Kasa değişmez, bahis geri verildi
+        })
+        .eq('id', roomId);
+
+      if (houseError) throw houseError;
+
+      // İşlemi kaydet
+      const { error: transactionError } = await supabase
+        .from('chip_transactions')
+        .insert({
+          user_id: user.id,
+          transaction_type: 'bet', // Para geri verildiği için 'bet' tersine
+          amount: session.bet_amount, // Pozitif miktar - geri verilen para
+          balance_before: userProfile.chips,
+          balance_after: session.chips_before,
+          game_session_id: sessionId,
+          description: `Berabere - Bahis geri verildi: ${session.bet_amount} chip`
+        });
+
+      if (transactionError) throw transactionError;
+
+      // Local state'i güncelle
+      setUserProfile(prev => prev ? { 
+        ...prev,
+        chips: session.chips_before, // Bahis öncesi duruma geri dön
+        games_played: prev.games_played + 1
+      } : null);
+
+      return true;
+    } catch (error) {
+      console.error('Berabere işlemi hatası:', error);
+      return false;
+    }
+  };
+
   // İşlem geçmişini al
   const getUserTransactions = async (limit: number = 10): Promise<ChipTransaction[]> => {
     if (!user) return [];
@@ -443,6 +529,7 @@ export function VirtualCurrencyProvider({ children }: { children: React.ReactNod
       placeBet,
       processWin,
       processLoss,
+      processTie,
       getGameRoom,
       getUserTransactions,
       refreshProfile

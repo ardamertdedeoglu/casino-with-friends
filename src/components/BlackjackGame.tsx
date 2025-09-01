@@ -52,6 +52,7 @@ interface Player {
   status: string;
   isBlackjack?: boolean;
   winnings?: number;
+  hasDoubledDown?: boolean;
 }
 
 interface ScoreboardEntry {
@@ -93,7 +94,7 @@ export default function BlackjackGame() {
   const [playerBets, setPlayerBets] = useState<{[playerId: string]: {decision: 'bet' | 'no-bet' | null, amount: number}}>({});
 
   // Virtual currency hook'u
-  const { userProfile, processWin, processLoss, getGameRoom } = useVirtualCurrency();
+  const { userProfile, processWin, processLoss, processTie, getGameRoom } = useVirtualCurrency();
 
   // Kullanıcı profili yüklendiğinde playerName'i otomatik ayarla
   useEffect(() => {
@@ -386,8 +387,11 @@ export default function BlackjackGame() {
         }
       } else if (result === 'tie') {
         // Berabere kalınca bahis geri verilir
-        setResultMessage(`🤝 Berabere! Bahsiniz geri verildi.`);
-        setGameResult('tie');
+        const success = await processTie(roomId, currentSessionId);
+        if (success) {
+          setResultMessage(`🤝 Berabere! Bahsiniz geri verildi.`);
+          setGameResult('tie');
+        }
       }
     } catch (error) {
       console.error('Game result processing error:', error);
@@ -461,6 +465,16 @@ export default function BlackjackGame() {
       await makeMove('stand', socketId);
     } else {
       console.log('❌ Stand failed - roomId:', roomId, 'socketId:', socketId);
+    }
+  };
+
+  const doubleDown = async () => {
+    if (roomId && socketId) {
+      console.log('🎰 Double down button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
+      console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
+      await makeMove('double-down', socketId);
+    } else {
+      console.log('❌ Double down failed - roomId:', roomId, 'socketId:', socketId);
     }
   };
 
@@ -804,13 +818,21 @@ export default function BlackjackGame() {
                       ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
                       : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
               }`}>
-                <h3 className="text-xl font-bold text-gray-800 mb-3 text-center">
-                  {player.name}
-                  {player.id === socketId && <span className="text-blue-600 ml-2">(Sen)</span>}
-                  {player.isBlackjack && <span className="text-yellow-600 ml-2 text-lg animate-pulse">👑</span>}
-                  {isMyTurn && player.id === socketId && <span className="text-yellow-600 ml-2">🎯</span>}
-                  {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xl font-bold text-gray-800">
+                    {player.name}
+                    {player.id === socketId && <span className="text-blue-600 ml-2">(Sen)</span>}
+                    {player.isBlackjack && <span className="text-yellow-600 ml-2 text-lg animate-pulse">👑</span>}
+                    {isMyTurn && player.id === socketId && <span className="text-yellow-600 ml-2">🎯</span>}
+                    {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
+                  </h3>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                    {player.isBlackjack && (
+                      <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
+                    )}
+                  </div>
+                </div>
                 {player.id === socketId && (
                   <div className="text-center mb-3">
                     <button
@@ -837,37 +859,32 @@ export default function BlackjackGame() {
                   ))}
                 </div>
                 <div className="text-center space-y-1">
-                  {/* Hit/Stand buttons for current player */}
+                  {/* Hit/Stand/Double Down buttons for current player */}
                   {isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
-                    <div className="flex items-center justify-center space-x-4 mb-2">
+                    <div className="flex items-center justify-center space-x-2 mb-2">
                       <button
                         onClick={hit}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-blue-500 flex items-center space-x-1"
+                        className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-2 rounded-lg font-bold text-xs hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-blue-500 flex items-center space-x-1"
                       >
-                        <span className="text-lg">🃏</span>
+                        <span className="text-sm">🃏</span>
                         <span>HIT</span>
                       </button>
-                      <div className="flex items-center space-x-2">
-                        <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
-                        {player.isBlackjack && (
-                          <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
-                        )}
-                      </div>
                       <button
                         onClick={stand}
-                        className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-red-500 flex items-center space-x-1"
+                        className="bg-gradient-to-r from-red-600 to-red-700 text-white px-3 py-2 rounded-lg font-bold text-xs hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-red-500 flex items-center space-x-1"
                       >
-                        <span className="text-lg">✋</span>
+                        <span className="text-sm">✋</span>
                         <span>STAND</span>
                       </button>
-                    </div>
-                  )}
-                  {/* Score display for other players or when not player's turn */}
-                  {!(isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack) && (
-                    <div className="flex items-center justify-center space-x-2">
-                      <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
-                      {player.isBlackjack && (
-                        <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
+                      {/* Double Down button - only show if player has exactly 2 cards */}
+                      {player.hand.length === 2 && (
+                        <button
+                          onClick={doubleDown}
+                          className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-2 rounded-lg font-bold text-xs hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-purple-500 flex items-center space-x-1"
+                        >
+                          <span className="text-sm">🎰</span>
+                          <span>DOUBLE</span>
+                        </button>
                       )}
                     </div>
                   )}
@@ -877,29 +894,42 @@ export default function BlackjackGame() {
                     <div className="flex items-center justify-center mb-2">
                       <div className="flex items-center space-x-2">
                         <span className="text-purple-700 font-bold">💰 Aktif Bahis:</span>
-                        {player.id === socketId ? (
-                          // Kendi bahis durumum
-                          hasBet ? (
-                            betDecision === 'bet' ? (
-                              <span className="text-lg font-bold text-green-700">{currentBet.toLocaleString()} 💎</span>
-                            ) : (
-                              <span className="text-lg font-bold text-orange-700">🚫 Yok</span>
-                            )
+                        {gameState?.gameState === 'playing' ? (
+                          // Oyun sırasında gerçek bet miktarını göster
+                          player.bet > 0 ? (
+                            <span className="text-lg font-bold text-green-700">
+                              {player.bet.toLocaleString()} 💎
+                              {player.hasDoubledDown && <span className="text-purple-600 ml-1">🎰2x</span>}
+                            </span>
                           ) : (
-                            <span className="text-lg font-bold text-gray-600">⏳</span>
+                            <span className="text-lg font-bold text-orange-700">🚫 Yok</span>
                           )
                         ) : (
-                          // Diğer oyuncuların bahis durumu - global state'ten al
-                          (() => {
-                            const playerBet = playerBets[player.id];
-                            if (!playerBet || playerBet.decision === null) {
-                              return <span className="text-lg font-bold text-gray-600">⏳</span>;
-                            } else if (playerBet.decision === 'bet') {
-                              return <span className="text-lg font-bold text-green-700">{playerBet.amount.toLocaleString()} 💎</span>;
-                            } else {
-                              return <span className="text-lg font-bold text-orange-700">🚫 Yok</span>;
-                            }
-                          })()
+                          // Oyun öncesi/sonrası bahis durumu
+                          player.id === socketId ? (
+                            // Kendi bahis durumum
+                            hasBet ? (
+                              betDecision === 'bet' ? (
+                                <span className="text-lg font-bold text-green-700">{currentBet.toLocaleString()} 💎</span>
+                              ) : (
+                                <span className="text-lg font-bold text-orange-700">🚫 Yok</span>
+                              )
+                            ) : (
+                              <span className="text-lg font-bold text-gray-600">⏳</span>
+                            )
+                          ) : (
+                            // Diğer oyuncuların bahis durumu - global state'ten al
+                            (() => {
+                              const playerBet = playerBets[player.id];
+                              if (!playerBet || playerBet.decision === null) {
+                                return <span className="text-lg font-bold text-gray-600">⏳</span>;
+                              } else if (playerBet.decision === 'bet') {
+                                return <span className="text-lg font-bold text-green-700">{playerBet.amount.toLocaleString()} 💎</span>;
+                              } else {
+                                return <span className="text-lg font-bold text-orange-700">🚫 Yok</span>;
+                              }
+                            })()
+                          )
                         )}
                       </div>
                     </div>
@@ -918,8 +948,18 @@ export default function BlackjackGame() {
                     {player.status === 'playing' && player.isBlackjack && '👑 BLACKJACK!'}
                     {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
                     {player.status === 'stood' && player.isBlackjack && '🎉 Blackjack & Durdu'}
-                    {player.status === 'stood' && !player.isBlackjack && '✋ Durdu'}
-                    {player.status === 'busted' && '💥 Battı'}
+                    {player.status === 'stood' && !player.isBlackjack && (
+                      // Check if this is a double down by checking if bet is doubled and only 3 cards
+                      (player.bet && player.hand.length === 3 && gameState?.gameState === 'playing') ? 
+                      '🎰 Double Down & Durdu' : 
+                      '✋ Durdu'
+                    )}
+                    {player.status === 'busted' && (
+                      // Check if this is a double down bust
+                      (player.bet && player.hand.length === 3 && gameState?.gameState === 'playing') ?
+                      '🎰💥 Double Down & Battı' :
+                      '💥 Battı'
+                    )}
                   </p>
                   {resultText && (
                     <p className="text-lg font-bold mt-2" style={{
@@ -1120,6 +1160,7 @@ export default function BlackjackGame() {
                             <div className="text-blue-700 text-xs mt-1 text-center">
                               {tie.reason === 'tie' && '⚖️ Eşit Skor!'}
                               {tie.reason === 'blackjack_push' && '🎭 Blackjack Berabere!'}
+                              {tie.reason === 'both_busted' && '💥 İkisi de Battı - Para Geri Verildi!'}
                             </div>
                           </div>
                         ))}

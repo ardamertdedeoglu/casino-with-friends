@@ -14,6 +14,7 @@ interface Player {
   bet: number;
   status: string;
   isBlackjack?: boolean;
+  hasDoubledDown?: boolean;
 }
 
 interface BetDecision {
@@ -221,6 +222,9 @@ export const useSocketGame = (
     } else if (action === 'stand') {
       console.log('🛑 Emitting stand event to room:', roomId);
       socketRef.current.emit('stand', roomId);
+    } else if (action === 'double-down') {
+      console.log('🎰 Emitting double-down event to room:', roomId);
+      socketRef.current.emit('double-down', roomId);
     }
   }, [roomId, isConnected]);
 
