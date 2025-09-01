@@ -66,6 +66,11 @@ export default function BlackjackGame() {
   const [gameResult, setGameResult] = useState<'win' | 'loss' | 'tie' | null>(null);
   const [resultMessage, setResultMessage] = useState('');
   const [gameRoom, setGameRoom] = useState<GameRoom | null>(null);
+  const [hasBet, setHasBet] = useState<boolean>(false);
+  const [betDecision, setBetDecision] = useState<'bet' | 'no-bet' | null>(null);
+  
+  // Tüm oyuncuların bahis durumlarını takip et
+  const [playerBets, setPlayerBets] = useState<{[playerId: string]: {decision: 'bet' | 'no-bet' | null, amount: number}}>({});
 
   // Virtual currency hook'u
   const { userProfile, placeBet, processWin, processLoss, getGameRoom } = useVirtualCurrency();
@@ -100,7 +105,48 @@ export default function BlackjackGame() {
   // Ref to prevent turn sound during blackjack sound
   const isBlackjackSoundPlayingRef = useRef(false);
 
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
+  // Betting callback functions
+  const handleBetUpdate = useCallback((data: any) => {
+    console.log('🎰 Received bet update:', data);
+    if (data.bet) {
+      setPlayerBets(prev => ({
+        ...prev,
+        [data.bet.playerId]: {
+          decision: data.bet.hasBet ? 'bet' : 'no-bet',
+          amount: data.bet.amount || 0
+        }
+      }));
+    }
+  }, []);
+
+  const handleBettingStatusUpdate = useCallback((data: any) => {
+    console.log('📊 Received betting status update:', data);
+    if (data.playerBets) {
+      const formattedBets: {[playerId: string]: {decision: 'bet' | 'no-bet', amount: number}} = {};
+      Object.entries(data.playerBets).forEach(([playerId, bet]: [string, any]) => {
+        formattedBets[playerId] = {
+          decision: bet.hasBet ? 'bet' : 'no-bet',
+          amount: bet.amount || 0
+        };
+      });
+      setPlayerBets(formattedBets);
+    }
+  }, []);
+
+  const handleBettingCleared = useCallback(() => {
+    console.log('🧹 Betting cleared');
+    setPlayerBets({});
+  }, []);
+
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error, sendBetDecision, requestBettingStatus } = useSocketGame(
+    roomId, 
+    playerName, 
+    joined,
+    undefined, // onChatMessage
+    handleBetUpdate,
+    handleBettingStatusUpdate,
+    handleBettingCleared
+  );
 
   // Otomatik olarak oyuna katıl
   useEffect(() => {
@@ -130,6 +176,14 @@ export default function BlackjackGame() {
       resetBetForNewGame();
     }
   }, [gameState?.gameState]);
+
+  // Demo amaçlı: Diğer oyuncuların bahis kararlarını simüle et
+  // Request betting status when game starts or when joining
+  useEffect(() => {
+    if (gameState?.gameState === 'waiting' && joined && requestBettingStatus) {
+      requestBettingStatus();
+    }
+  }, [gameState?.gameState, joined, requestBettingStatus]);
 
   // Oyun bittiğinde bahisleri sıfırla (biraz gecikme ile)
   useEffect(() => {
@@ -238,9 +292,58 @@ export default function BlackjackGame() {
     setShowBetModal(false);
     setGameResult(null);
     setResultMessage('');
+    setHasBet(true);
+    setBetDecision('bet');
+    
+    // Global player bets state'ini güncelle
+    if (socketId) {
+      setPlayerBets(prev => ({
+        ...prev,
+        [socketId]: { decision: 'bet', amount: amount }
+      }));
+
+      // Socket ile diğer oyunculara bahis kararını gönder
+      if (sendBetDecision && playerName) {
+        sendBetDecision({
+          playerId: socketId,
+          amount: amount,
+          hasDecided: true,
+          hasBet: true,
+          playerName: playerName
+        });
+      }
+    }
 
     console.log(`Bahis yerleştirildi: ${amount} (Session ID: ${sessionId})`);
+  };
 
+  const handleNoBet = () => {
+    setShowBetModal(false);
+    setCurrentBet(0);
+    setCurrentSessionId('');
+    setHasBet(true);
+    setBetDecision('no-bet');
+    
+    // Global player bets state'ini güncelle
+    if (socketId) {
+      setPlayerBets(prev => ({
+        ...prev,
+        [socketId]: { decision: 'no-bet', amount: 0 }
+      }));
+
+      // Socket ile diğer oyunculara bahis kararını gönder
+      if (sendBetDecision && playerName) {
+        sendBetDecision({
+          playerId: socketId,
+          amount: 0,
+          hasDecided: true,
+          hasBet: false,
+          playerName: playerName
+        });
+      }
+    }
+    
+    console.log('Kullanıcı bahis yapmamayı seçti');
   };
 
   const handleGameResult = async (result: 'win' | 'loss' | 'tie', isBlackjack: boolean = false) => {
@@ -276,6 +379,9 @@ export default function BlackjackGame() {
     setCurrentSessionId('');
     setGameResult(null);
     setResultMessage('');
+    setHasBet(false);
+    setBetDecision(null);
+    setPlayerBets({}); // Tüm oyuncuların bahis durumlarını sıfırla
   };
 
   const handleNewRound = async () => {
@@ -284,6 +390,21 @@ export default function BlackjackGame() {
     
     // Oyunu waiting durumuna getir (resetRoom kullanarak)
     await resetRoom();
+  };
+
+  // Tüm oyuncuların bahis kararı verip vermediğini kontrol et
+  const allPlayersReady = () => {
+    if (!gameState?.players || gameState.players.length === 0) return false;
+    
+    // Tüm oyuncuların bahis kararı verip vermediğini kontrol et
+    return gameState.players.every(player => {
+      if (player.id === socketId) {
+        return hasBet; // Kendi durumum
+      } else {
+        const playerBet = playerBets[player.id];
+        return playerBet && playerBet.decision !== null; // Diğer oyuncuların durumu
+      }
+    });
   };
 
   const joinRoom = async () => {
@@ -730,41 +851,49 @@ export default function BlackjackGame() {
                       )}
                     </div>
                   )}
-                  {/* Bahis Bilgileri */}
-                  {player.id === socketId && (
-                    <div className="mt-3 p-3 bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg border border-purple-300">
-                      {currentBet > 0 && (
-                        <div className="flex items-center justify-center mb-2">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-purple-700 font-bold">💰 Aktif Bahis:</span>
-                            <span className="text-lg font-bold text-purple-900">{currentBet.toLocaleString()} 💎</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Bahis Butonu - Oyuna katıldıktan sonra ve bahis yapılmamışsa */}  
-                      {joined && currentBet === 0 && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') && (
-                        <button
-                          onClick={() => setShowBetModal(true)}
-                          className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-black px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-600 hover:to-yellow-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-yellow-400"
-                        >
-                          🎯 Bahis Yap
-                        </button>
-                      )}
-                      
-                      
-                      {/* Bahis Sonucu Mesajı */}
-                      {resultMessage && (
-                        <div className={`mt-2 p-2 rounded-lg text-center font-bold text-sm ${
-                          gameResult === 'win' ? 'bg-green-200 text-green-800 border border-green-400' :
-                          gameResult === 'loss' ? 'bg-red-200 text-red-800 border border-red-400' :
-                          'bg-blue-200 text-blue-800 border border-blue-400'
-                        }`}>
-                          {resultMessage}
-                        </div>
-                      )}
+                  {/* Bahis Bilgileri - Herkes için görünür */}
+                  <div className="mt-3 p-3 bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg border border-purple-300">
+                    {/* Bahis Durumu */}
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-purple-700 font-bold">💰 Aktif Bahis:</span>
+                        {player.id === socketId ? (
+                          // Kendi bahis durumum
+                          hasBet ? (
+                            betDecision === 'bet' ? (
+                              <span className="text-lg font-bold text-green-700">{currentBet.toLocaleString()} 💎</span>
+                            ) : (
+                              <span className="text-lg font-bold text-orange-700">🚫 Yok</span>
+                            )
+                          ) : (
+                            <span className="text-lg font-bold text-gray-600">⏳</span>
+                          )
+                        ) : (
+                          // Diğer oyuncuların bahis durumu - global state'ten al
+                          (() => {
+                            const playerBet = playerBets[player.id];
+                            if (!playerBet || playerBet.decision === null) {
+                              return <span className="text-lg font-bold text-gray-600">⏳</span>;
+                            } else if (playerBet.decision === 'bet') {
+                              return <span className="text-lg font-bold text-green-700">{playerBet.amount.toLocaleString()} 💎</span>;
+                            } else {
+                              return <span className="text-lg font-bold text-orange-700">🚫 Yok</span>;
+                            }
+                          })()
+                        )}
+                      </div>
                     </div>
-                  )}
+                    
+                    {/* Bahis Butonları - Sadece kendi için */}
+                    {player.id === socketId && joined && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') && !hasBet && (
+                      <button
+                        onClick={() => setShowBetModal(true)}
+                        className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-black px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-600 hover:to-yellow-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-yellow-400"
+                      >
+                        🎯 Bahis Yap
+                      </button>
+                    )}
+                  </div>
                   <p className="text-gray-600 capitalize font-medium">
                     {player.status === 'playing' && player.isBlackjack && '👑 BLACKJACK!'}
                     {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
@@ -791,15 +920,25 @@ export default function BlackjackGame() {
           <div className="text-center">
             <button
               onClick={startGame}
-              disabled={isLoading}
+              disabled={isLoading || !allPlayersReady()}
               className={`px-8 py-4 rounded-xl font-bold text-lg shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 ${
-                isLoading
+                isLoading || !allPlayersReady()
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-gray-500'
                   : 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 border-green-500'
               }`}
             >
-              {isLoading ? '🎲 Oyun Başlatılıyor...' : '🎲 Oyunu Başlat'}
+              {isLoading 
+                ? '🎲 Oyun Başlatılıyor...' 
+                : !allPlayersReady() 
+                ? '⏳ Bahis Kararları Bekleniyor...' 
+                : '🎲 Oyunu Başlat'
+              }
             </button>
+            {!allPlayersReady() && (
+              <p className="text-yellow-300 text-sm mt-2">
+                Tüm oyuncuların bahis kararı vermesi bekleniyor
+              </p>
+            )}
           </div>
         )}
 
@@ -1071,6 +1210,7 @@ export default function BlackjackGame() {
             roomId={roomId}
             gameType="blackjack"
             onBetPlaced={handleBetPlaced}
+            onNoBet={handleNoBet}
             onClose={() => setShowBetModal(false)}
             minBet={10}
             maxBet={1000}

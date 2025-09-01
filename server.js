@@ -584,8 +584,14 @@ app.prepare().then(() => {
           }
         }
 
+        // Clear betting decisions for new game
+        newGame.playerBets = new Map();
+
         console.log(`✅ Room ${roomId} reset successfully with preserved winnings`);
         io.to(roomId).emit('game-update', newGame.getGameState());
+        
+        // Notify clients to clear their betting state
+        io.to(roomId).emit('betting-cleared');
       } else {
         console.log(`❌ Room ${roomId} not found for reset`);
       }
@@ -603,6 +609,45 @@ app.prepare().then(() => {
         message: message,
         timestamp: Date.now()
       });
+    });
+
+    // Betting decision events
+    socket.on('bet-decision', (data) => {
+      const { roomId, decision, amount = 0 } = data;
+      console.log(`💰 Bet decision from ${socket.id} in room ${roomId}: ${decision}, amount: ${amount}`);
+      
+      const game = gameRooms.get(roomId);
+      if (game) {
+        // Store betting decision in the game
+        if (!game.playerBets) {
+          game.playerBets = new Map();
+        }
+        
+        game.playerBets.set(socket.id, { decision, amount });
+        
+        // Broadcast the betting decision to all players in the room
+        io.to(roomId).emit('bet-decision-update', {
+          playerId: socket.id,
+          decision: decision,
+          amount: amount
+        });
+        
+        console.log(`📤 Bet decision broadcasted to room ${roomId}`);
+      }
+    });
+
+    socket.on('get-betting-status', (roomId) => {
+      const game = gameRooms.get(roomId);
+      if (game && game.playerBets) {
+        // Send current betting status to the requesting player
+        const bettingStatus = {};
+        game.playerBets.forEach((betInfo, playerId) => {
+          bettingStatus[playerId] = betInfo;
+        });
+        
+        socket.emit('betting-status-update', bettingStatus);
+        console.log(`📤 Betting status sent to ${socket.id} in room ${roomId}`);
+      }
     });
   });
 

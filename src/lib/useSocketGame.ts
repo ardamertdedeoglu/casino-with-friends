@@ -32,7 +32,15 @@ interface GameState {
   } | null;
 }
 
-export const useSocketGame = (roomId: string, playerName: string, joined: boolean = false, onChatMessage?: (message: {id: string, name: string, message: string, timestamp: number}) => void) => {
+export const useSocketGame = (
+  roomId: string, 
+  playerName: string, 
+  joined: boolean = false, 
+  onChatMessage?: (message: {id: string, name: string, message: string, timestamp: number}) => void,
+  onBetUpdate?: (data: any) => void,
+  onBettingStatusUpdate?: (data: any) => void,
+  onBettingCleared?: () => void
+) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -131,6 +139,28 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
     socket.on('chat-message', (message) => {
       if (onChatMessage) {
         onChatMessage(message);
+      }
+    });
+
+    // Betting event listeners
+    socket.on('bet-decision-update', (data) => {
+      console.log('🎰 Received bet decision update:', data);
+      if (onBetUpdate) {
+        onBetUpdate(data);
+      }
+    });
+
+    socket.on('betting-status-update', (data) => {
+      console.log('📊 Received betting status update:', data);
+      if (onBettingStatusUpdate) {
+        onBettingStatusUpdate(data);
+      }
+    });
+
+    socket.on('betting-cleared', () => {
+      console.log('🧹 Betting decisions cleared');
+      if (onBettingCleared) {
+        onBettingCleared();
       }
     });
 
@@ -246,6 +276,29 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
     }
   }, [isConnected, roomId, playerName]);
 
+  // Betting decision gönder
+  const sendBetDecision = useCallback(async (bet: { playerId: string; amount: number; hasDecided: boolean; hasBet: boolean; playerName: string }) => {
+    if (socketRef.current && isConnected && roomId) {
+      console.log('🎰 Sending bet decision:', bet);
+      socketRef.current.emit('bet-decision', {
+        roomId,
+        bet
+      });
+    } else {
+      console.error('❌ Cannot send bet decision - socket not connected');
+    }
+  }, [isConnected, roomId]);
+
+  // Betting status iste
+  const requestBettingStatus = useCallback(async () => {
+    if (socketRef.current && isConnected && roomId) {
+      console.log('📊 Requesting betting status');
+      socketRef.current.emit('get-betting-status', { roomId });
+    } else {
+      console.error('❌ Cannot request betting status - socket not connected');
+    }
+  }, [isConnected, roomId]);
+
   return {
     gameState,
     isConnected,
@@ -259,6 +312,8 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
     leaveGame,
     resetRoom,
     changeName,
-    sendChatMessage
+    sendChatMessage,
+    sendBetDecision,
+    requestBettingStatus
   };
 };
