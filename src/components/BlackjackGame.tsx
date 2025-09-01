@@ -503,8 +503,10 @@ export default function BlackjackGame() {
   const canSplit = (player: Player) => {
     if (!player.hand || player.hand.length !== 2 || player.hasSplit) return false;
     
-    const card1Value = getCardValue(player.hand[0]);
-    const card2Value = getCardValue(player.hand[1]);
+    // Kartların değeri tam olarak aynı olmalı (Q ile Q, J ile J, 10 ile 10 vs.)
+    // Q ile 10, K ile 10 gibi kombinasyonlar split edilemez
+    const card1Value = player.hand[0].value;
+    const card2Value = player.hand[1].value;
     
     return card1Value === card2Value;
   };
@@ -1006,14 +1008,14 @@ export default function BlackjackGame() {
                     {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
                     {player.status === 'stood' && player.isBlackjack && '🎉 Blackjack & Durdu'}
                     {player.status === 'stood' && !player.isBlackjack && (
-                      // Check if this is a double down by checking if bet is doubled and only 3 cards
-                      (player.bet && player.hand.length === 3 && gameState?.gameState === 'playing') ? 
+                      // Check if this is a double down by checking hasDoubledDown flag
+                      player.hasDoubledDown ? 
                       '🎰 Double Down & Durdu' : 
                       '✋ Durdu'
                     )}
                     {player.status === 'busted' && (
-                      // Check if this is a double down bust
-                      (player.bet && player.hand.length === 3 && gameState?.gameState === 'playing') ?
+                      // Check if this is a double down bust using hasDoubledDown flag
+                      player.hasDoubledDown ?
                       '🎰💥 Double Down & Battı' :
                       '💥 Battı'
                     )}
@@ -1323,7 +1325,12 @@ export default function BlackjackGame() {
 
       {/* Bahis Modal */}
       {showBetModal && (
-        <div className="fixed inset-0 backdrop-blur-sm bg-opacity-20 flex items-center justify-center z-50 p-4">
+        <div 
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.9) 100%)'
+          }}
+        >
           <BetPlacement
             roomId={roomId}
             gameType="blackjack"

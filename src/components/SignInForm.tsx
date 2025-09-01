@@ -112,7 +112,7 @@ export default function SignInForm({ onSuccess, onClose, onSwitchToSignUp }: Sig
           onClick={onSwitchToSignUp}
           className="text-blue-200 hover:text-white transition-colors duration-200 text-sm underline"
         >
-          Hesabınız yok mu? Kayıt olun
+          Hesabınız yok mu? Kayıt olun!
         </button>
       </div>
     </div>

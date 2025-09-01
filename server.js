@@ -206,10 +206,11 @@ class BlackjackGame {
       
       // Split için gerekli koşulları kontrol et
       if (currentHand.cards.length === 2) {
-        const card1Value = this.getCardValue(currentHand.cards[0]);
-        const card2Value = this.getCardValue(currentHand.cards[1]);
+        const card1Value = currentHand.cards[0].value;
+        const card2Value = currentHand.cards[1].value;
         
-        // Kartların değeri aynı olmalı (10, J, Q, K hepsi 10 değerinde)
+        // Kartların değeri tam olarak aynı olmalı (Q ile Q, J ile J, 10 ile 10 vs.)
+        // Q ile 10, K ile 10 gibi kombinasyonlar split edilemez
         if (card1Value === card2Value) {
           player.hasSplit = true;
           
@@ -467,84 +468,107 @@ class BlackjackGame {
     let dealerWins = 0;
 
     for (const [playerId, player] of this.players) {
-      // Özel durum: Hem oyuncu hem dealer bust olduysa - tie (para geri verilir)
-      if (player.status === 'busted' && this.dealer.score > 21) {
-        results.ties.push({
-          id: playerId,
-          name: player.name,
-          reason: 'both_busted'
-        });
-        // Bu durumda ne dealer ne de oyuncu kazanır
-      }
-      // Player already busted (dealer bust olmadı)
-      else if (player.status === 'busted') {
-        results.losers.push({
-          id: playerId,
-          name: player.name,
-          reason: 'busted'
-        });
-        dealerWins++; // Dealer wins when player busts (and dealer doesn't bust)
-      }
-      // Player has blackjack
-      else if (player.isBlackjack) {
-        if (this.dealer.isBlackjack) {
-          // Both have blackjack - push (tie)
-          results.ties.push({
-            id: playerId,
-            name: player.name,
-            reason: 'blackjack_push'
-          });
-          // No winner for this round
+      // Her el için ayrı ayrı sonuç hesapla
+      let playerWon = false;
+      let playerLost = false;
+      let playerTied = false;
+      let totalWinnings = 0;
+      
+      for (let handIndex = 0; handIndex < player.hands.length; handIndex++) {
+        const hand = player.hands[handIndex];
+        
+        console.log(`🎯 Evaluating ${player.name} hand ${handIndex}: score=${hand.score}, status=${hand.status}, isBlackjack=${hand.isBlackjack}, bet=${hand.bet}`);
+        
+        // Özel durum: Hem oyuncu hem dealer bust olduysa - tie (para geri verilir)
+        if (hand.status === 'busted' && this.dealer.score > 21) {
+          console.log(`🤝 Hand ${handIndex}: Both player and dealer busted - tie`);
+          playerTied = true;
+        }
+        // Player hand busted (dealer bust olmadı)
+        else if (hand.status === 'busted') {
+          console.log(`💥 Hand ${handIndex}: Player busted - dealer wins`);
+          playerLost = true;
+          dealerWins++; // Dealer wins when player busts (and dealer doesn't bust)
+        }
+        // Player hand has blackjack
+        else if (hand.isBlackjack) {
+          if (this.dealer.isBlackjack) {
+            // Both have blackjack - push (tie)
+            console.log(`🤝 Hand ${handIndex}: Both have blackjack - tie`);
+            playerTied = true;
+          } else {
+            // Player blackjack wins
+            console.log(`🎉 Hand ${handIndex}: Player blackjack wins`);
+            playerWon = true;
+            totalWinnings += 2; // Blackjack pays 2:1
+          }
+        }
+        // Dealer has blackjack (player doesn't)
+        else if (this.dealer.isBlackjack) {
+          console.log(`😞 Hand ${handIndex}: Dealer blackjack - player loses`);
+          playerLost = true;
+          dealerWins++; // Dealer wins with blackjack
+        }
+        // Dealer busted (player didn't)
+        else if (this.dealer.score > 21) {
+          console.log(`🎉 Hand ${handIndex}: Dealer busted - player wins`);
+          playerWon = true;
+          totalWinnings += 1; // Regular win pays 1:1
+        }
+        // Compare scores (neither busted, neither has blackjack)
+        else if (hand.score > this.dealer.score) {
+          console.log(`🎉 Hand ${handIndex}: Player higher score (${hand.score} vs ${this.dealer.score}) - player wins`);
+          playerWon = true;
+          totalWinnings += 1; // Regular win pays 1:1
+        } else if (hand.score < this.dealer.score) {
+          console.log(`😞 Hand ${handIndex}: Dealer higher score (${this.dealer.score} vs ${hand.score}) - dealer wins`);
+          playerLost = true;
+          dealerWins++; // Dealer wins with higher score
         } else {
-          // Player blackjack wins
-          results.winners.push({
-            id: playerId,
-            name: player.name,
-            reason: 'blackjack'
-          });
-          player.winnings += 2; // Blackjack pays 2:1
+          console.log(`🤝 Hand ${handIndex}: Same score (${hand.score}) - tie`);
+          playerTied = true;
         }
       }
-      // Dealer has blackjack
-      else if (this.dealer.isBlackjack) {
-        results.losers.push({
-          id: playerId,
-          name: player.name,
-          reason: 'dealer_blackjack'
-        });
-        dealerWins++; // Dealer wins with blackjack
-      }
-      // Dealer busted
-      else if (this.dealer.score > 21) {
+      
+      // Apply winnings to player
+      player.winnings += totalWinnings;
+      
+      // Determine overall result for this player (prioritize wins over losses over ties)
+      if (playerWon && !playerLost) {
+        // Pure win case
+        const hasBlackjack = player.hands.some(hand => hand.isBlackjack && !hand.status === 'busted');
         results.winners.push({
           id: playerId,
           name: player.name,
-          reason: 'dealer_busted'
+          reason: hasBlackjack ? 'blackjack' : (this.dealer.score > 21 ? 'dealer_busted' : 'higher_score')
         });
-        player.winnings += 1; // Regular win pays 1:1
-      }
-      // Compare scores
-      else if (player.score > this.dealer.score) {
-        results.winners.push({
-          id: playerId,
-          name: player.name,
-          reason: 'higher_score'
-        });
-        player.winnings += 1; // Regular win pays 1:1
-      } else if (player.score < this.dealer.score) {
+        console.log(`🎉 Overall result for ${player.name}: WIN`);
+      } else if (playerLost && !playerWon) {
+        // Pure loss case
+        const allBusted = player.hands.every(hand => hand.status === 'busted');
         results.losers.push({
           id: playerId,
           name: player.name,
-          reason: 'lower_score'
+          reason: allBusted ? 'busted' : (this.dealer.isBlackjack ? 'dealer_blackjack' : 'lower_score')
         });
-        dealerWins++; // Dealer wins with higher score
-      } else {
+        console.log(`😞 Overall result for ${player.name}: LOSS`);
+      } else if (playerTied && !playerWon && !playerLost) {
+        // Pure tie case
+        const hasBlackjackTie = player.hands.some(hand => hand.isBlackjack) && this.dealer.isBlackjack;
         results.ties.push({
           id: playerId,
           name: player.name,
-          reason: 'tie'
+          reason: hasBlackjackTie ? 'blackjack_push' : 'tie'
         });
-        // Ties don't affect winnings
+        console.log(`🤝 Overall result for ${player.name}: TIE`);
+      } else {
+        // Mixed results - classify as tie since it's complex
+        results.ties.push({
+          id: playerId,
+          name: player.name,
+          reason: 'mixed_results'
+        });
+        console.log(`🤝 Overall result for ${player.name}: MIXED (classified as tie)`);
       }
     }
 
