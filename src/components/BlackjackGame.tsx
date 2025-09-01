@@ -500,7 +500,7 @@ export default function BlackjackGame() {
   };
 
   // Split yapılabilir mi kontrol et
-  const canSplit = (player: any) => {
+  const canSplit = (player: Player) => {
     if (!player.hand || player.hand.length !== 2 || player.hasSplit) return false;
     
     const card1Value = getCardValue(player.hand[0]);
