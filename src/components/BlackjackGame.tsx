@@ -4,11 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useSocketGame } from '../lib/useSocketGame';
-import { useVirtualCurrency } from '../lib/virtualCurrency';
 import Scoreboard from './Scoreboard';
 import ChatComponent from './ChatComponent';
 import SoundVolumeControl from './SoundVolumeControl';
-import BetPlacement from './BetPlacement';
 
 interface Card {
   suit: string;
@@ -51,12 +49,6 @@ export default function BlackjackGame() {
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
 
-  // Virtual Currency States
-  const [showBetPlacement, setShowBetPlacement] = useState(false);
-  const [currentBet, setCurrentBet] = useState<number>(0);
-  const [currentBetId, setCurrentBetId] = useState<string>('');
-  const [gameStarted, setGameStarted] = useState(false);
-
   // Ref for turn notification sound
   const turnSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -69,17 +61,7 @@ export default function BlackjackGame() {
   // Ref to prevent turn sound during blackjack sound
   const isBlackjackSoundPlayingRef = useRef(false);
 
-  const { gameState, setGameState, socket, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
-  const {
-    userChips,
-    gameSession,
-    createGameSession,
-    getGameSession,
-    placeBet,
-    resolveBet,
-    updateDealerBalance,
-    formatChips
-  } = useVirtualCurrency();
+  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
 
   // Calculate turn status before any conditional logic
   const isMyTurn = gameState ? gameState.currentPlayer === socketId : false;
@@ -107,69 +89,6 @@ export default function BlackjackGame() {
       console.log('🎯 Turn sound blocked - blackjack sound is playing');
     }
   }, [isMyTurn, gameState?.gameState]);
-
-  // Handle game end and resolve bets
-  useEffect(() => {
-    if (gameState?.gameState === 'finished' && gameState.results && currentBet > 0) {
-      console.log('🎰 Game finished, resolving bets...');
-
-      // Check if current player won
-      const isWinner = gameState.results.winners.some(w => w.id === socketId);
-      const isLoser = gameState.results.losers.some(l => l.id === socketId);
-      const isTie = gameState.results.ties.some(t => t.id === socketId);
-
-      let won = false;
-      if (isWinner) {
-        won = true;
-        console.log('✅ Player won!');
-      } else if (isLoser) {
-        won = false;
-        console.log('❌ Player lost!');
-      }
-
-      // Check if player got blackjack
-      const winnerInfo = gameState.results.winners.find(w => w.id === socketId);
-      const isPlayerBlackjack = winnerInfo?.reason === 'blackjack';
-
-      console.log(`🎰 Game result - Won: ${won}, Blackjack: ${isPlayerBlackjack}, Tie: ${isTie}, Bet: ${currentBet}`);
-
-      // Resolve the bet
-      handleGameEnd(won, isPlayerBlackjack, isTie);
-    }
-  }, [gameState?.gameState, gameState?.results, currentBet, socketId]);
-
-  // Reset bets when new game starts
-  useEffect(() => {
-    if (gameState?.gameState === 'waiting' && currentBet > 0) {
-      console.log('🔄 New game starting, resetting bets...');
-      setCurrentBet(0);
-      setCurrentBetId('');
-      setGameStarted(false);
-
-      // Reset player bets in game state
-      if (gameState && socketId) {
-        const updatedGameState = {
-          ...gameState,
-          players: gameState.players.map(player =>
-            player.id === socketId
-              ? { ...player, bet: 0 }
-              : player
-          )
-        };
-        setGameState(updatedGameState);
-      }
-    }
-  }, [gameState?.gameState, currentBet, socketId]);
-
-  // Reset bets when game starts playing (each round is separate)
-  useEffect(() => {
-    if (gameState?.gameState === 'playing' && currentBet > 0 && !gameStarted) {
-      console.log('🎮 Game started playing, ensuring bets are fresh for this round...');
-      // Don't reset bets here, let them persist until game ends
-      // This ensures each round requires a new bet
-      setGameStarted(true);
-    }
-  }, [gameState?.gameState, currentBet, gameStarted]);
 
   // Play blackjack sound when any player gets blackjack (except dealer)
   useEffect(() => {
@@ -211,17 +130,6 @@ export default function BlackjackGame() {
       });
     }
   }, [gameState?.players]);
-
-  // Play sound when bet placement modal opens
-  useEffect(() => {
-    if (showBetPlacement && turnSoundRef.current && !isBlackjackSoundPlayingRef.current) {
-      console.log('💰 Bet placement modal opened - playing notification sound');
-      turnSoundRef.current.currentTime = 0; // Reset to beginning
-      turnSoundRef.current.play().catch(err => {
-        console.log('Bahis modal ses çalma hatası:', err);
-      });
-    }
-  }, [showBetPlacement]);
 
   const handleLeaveGame = async () => {
     if (playerId && roomId) {
@@ -280,89 +188,6 @@ export default function BlackjackGame() {
       alert('İsim en az 2 karakter olmalıdır!');
     } else if (trimmedName.length > 15) {
       alert('İsim en fazla 15 karakter olabilir!');
-    }
-  };
-
-  // Virtual Currency Functions
-  const handleBetPlaced = async (betAmount: number) => {
-    // Create or get game session
-    const session = await createGameSession(roomId, 'blackjack');
-    if (!session) {
-      alert('Oyun oturumu oluşturulamadı!');
-      return;
-    }
-
-    // Place bet
-    const bet = await placeBet(session.id, betAmount, 'blackjack', roomId);
-    if (!bet) {
-      alert('Bahis yerleştirilemedi!');
-      return;
-    }
-
-    setCurrentBet(betAmount);
-    setCurrentBetId(bet.id);
-    setShowBetPlacement(false);
-    setGameStarted(true);
-
-    // Update player bet in game state
-    if (gameState && socketId) {
-      const updatedGameState = {
-        ...gameState,
-        players: gameState.players.map(player =>
-          player.id === socketId
-            ? { ...player, bet: betAmount }
-            : player
-        )
-      };
-      // This will trigger a re-render with updated bet information
-      setGameState(updatedGameState);
-
-      // Emit bet update to other players
-      if (socket) {
-        socket.emit('update-player-bet', {
-          roomId,
-          playerId: socketId,
-          betAmount
-        });
-      }
-    }
-
-    // After placing bet, start the game
-    startGame();
-  };
-
-  const handleGameEnd = async (won: boolean, isBlackjack: boolean = false, isTie: boolean = false) => {
-    if (currentBet > 0 && currentBetId) {
-      // Blackjack durumunda 3x kazanç, normal kazanç durumunda 2x kazanç
-      // Berabere durumunda bahis geri verilir
-      let payoutAmount = 0;
-
-      if (isTie) {
-        payoutAmount = currentBet; // Bahis geri verilir
-      } else if (won) {
-        const multiplier = isBlackjack ? 3 : 2; // Blackjack için 3x, normal kazanç için 2x
-        payoutAmount = Math.floor(currentBet * multiplier);
-      }
-
-      console.log(`🎰 Game ended - Won: ${won}, Blackjack: ${isBlackjack}, Tie: ${isTie}, Bet: ${currentBet}, Payout: ${payoutAmount}`);
-
-      // Get current game session
-      const session = await getGameSession(roomId, 'blackjack');
-      if (session) {
-        // Update dealer balance
-        const dealerChange = won ? -payoutAmount : (isTie ? currentBet : -currentBet);
-        const newDealerBalance = session.dealer_balance + dealerChange;
-
-        console.log(`🏦 Dealer balance: ${session.dealer_balance} -> ${newDealerBalance} (change: ${dealerChange})`);
-
-        await updateDealerBalance(session.id, newDealerBalance);
-      }
-
-      // Resolve bet
-      await resolveBet(currentBetId, won, payoutAmount);
-
-      setCurrentBet(0);
-      setCurrentBetId('');
     }
   };
 
@@ -448,19 +273,6 @@ export default function BlackjackGame() {
             <p className="text-gray-700 text-lg font-medium">Arkadaşlarınla oyna ve kazan!</p>
             <p className="text-gray-600 text-sm mt-2">Oda: <span className="font-bold text-green-700">{roomId}</span></p>
           </div>
-
-          {/* Chip Balance Display */}
-          {userChips && (
-            <div className="bg-gradient-to-r from-yellow-100 to-yellow-200 p-4 rounded-xl mb-6 border-2 border-yellow-300">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-1">Mevcut Bakiye</p>
-                <p className="text-2xl font-bold text-yellow-800">
-                  {formatChips(userChips.balance)} 💰
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="space-y-6">
             {error && (
               <div className="bg-red-100 border-2 border-red-400 text-red-800 px-4 py-3 rounded-lg font-medium">
@@ -487,7 +299,7 @@ export default function BlackjackGame() {
               disabled={isLoading || !playerName.trim() || playerName.trim().length < 2 || playerName.length > 15}
               className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-500 disabled:border-gray-400"
             >
-              {isLoading ? '🔄 Hazırlanıyor...' : '🎰 Odaya Katıl'}
+              {isLoading ? '🔄 Katılıyor...' : '🎲 Oyuna Katıl'}
             </button>
           </div>
         </div>
@@ -585,21 +397,6 @@ export default function BlackjackGame() {
           }}
           className="mt-4"
         />
-
-        {/* Player Bet Info Panel */}
-        {currentPlayerData && currentPlayerData.bet > 0 && (
-          <div className="mt-4 bg-gradient-to-r from-green-800 to-blue-800 p-3 rounded-lg shadow-lg border border-green-400">
-            <h4 className="text-green-300 font-bold text-sm mb-2 text-center">🎯 SENİN BAHİSİN</h4>
-            <div className="text-center">
-              <p className="text-white font-bold text-xl">{formatChips(currentPlayerData.bet)} 💰</p>
-              {userChips && (
-                <p className="text-green-200 text-xs mt-1">
-                  Kalan Bakiye: {formatChips(userChips.balance - currentPlayerData.bet)}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="max-w-6xl mx-auto">
@@ -631,28 +428,6 @@ export default function BlackjackGame() {
           </div>
         </div>
 
-        {/* Bets Summary Panel */}
-        {gameState.players.some((p: Player) => p.bet > 0) && (
-          <div className="bg-gradient-to-r from-blue-900 to-purple-900 p-4 rounded-xl mb-6 shadow-xl border-2 border-blue-400">
-            <h3 className="text-xl font-bold text-blue-300 mb-3 text-center">🎯 AKTİF BAHİSLER</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {gameState.players.filter((p: Player) => p.bet > 0).map((player: Player) => (
-                <div key={player.id} className="bg-black bg-opacity-30 rounded-lg p-3 text-center">
-                  <p className="text-white font-semibold text-sm">{player.name}</p>
-                  <p className="text-yellow-400 font-bold text-lg">{formatChips(player.bet)} 💰</p>
-                </div>
-              ))}
-            </div>
-            <div className="text-center mt-3 pt-3 border-t border-blue-400">
-              <p className="text-blue-200 text-sm">
-                Toplam Bahis: <span className="text-white font-bold text-lg">
-                  {formatChips(gameState.players.reduce((total: number, p: Player) => total + (p.bet || 0), 0))} 💰
-                </span>
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Dealer's hand */}
         <div className="bg-gradient-to-r from-red-900 to-red-800 p-6 rounded-xl mb-6 shadow-2xl border-4 border-yellow-400">
           <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KRUPİYER</h2>
@@ -673,11 +448,6 @@ export default function BlackjackGame() {
           </div>
           <div className="text-center mt-4">
             <p className="text-yellow-300 text-lg font-semibold">Skor: <span className="text-white text-xl">{gameState.dealer.visibleScore}</span></p>
-            {gameSession && (
-              <p className="text-green-300 text-sm font-medium mt-1">
-                💰 Bakiye: <span className="text-white text-lg">{formatChips(gameSession.dealer_balance)}</span>
-              </p>
-            )}
             {gameState.dealer.isBlackjack && !gameState.dealer.hiddenCard && (
               <p className="text-red-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! 🃏</p>
             )}
@@ -695,7 +465,7 @@ export default function BlackjackGame() {
             if (gameState.gameState === 'finished' as string && gameState.results) {
               const isWinner = gameState.results.winners.some((w: { id: string; name: string; reason: string }) => w.id === player.id);
               const isLoser = gameState.results.losers.some((l: { id: string; name: string; reason: string }) => l.id === player.id);
-              const isPlayerTie = gameState.results.ties.some((t: { id: string; name: string; reason: string }) => t.id === player.id);
+              const isTie = gameState.results.ties.some((t: { id: string; name: string; reason: string }) => t.id === player.id);
 
               if (isWinner) {
                 resultStyle = 'border-green-500 bg-gradient-to-br from-green-100 to-green-200 ring-4 ring-green-300';
@@ -715,7 +485,7 @@ export default function BlackjackGame() {
                 } else {
                   resultText = 'Kaybettin!';
                 }
-              } else if (isPlayerTie) {
+              } else if (isTie) {
                 resultStyle = 'border-blue-500 bg-gradient-to-br from-blue-100 to-blue-200 ring-4 ring-blue-300';
                 resultIcon = '🤝';
                 const tieInfo = gameState.results.ties.find((t: { id: string; name: string; reason: string }) => t.id === player.id);
@@ -780,11 +550,8 @@ export default function BlackjackGame() {
                         <span className="text-lg">🃏</span>
                         <span>HIT</span>
                       </button>
-                      <div className="flex flex-col items-center space-y-1">
+                      <div className="flex items-center space-x-2">
                         <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
-                        {player.bet > 0 && (
-                          <p className="text-blue-600 font-bold text-sm">🎯 {formatChips(player.bet)}</p>
-                        )}
                         {player.isBlackjack && (
                           <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
                         )}
@@ -805,13 +572,6 @@ export default function BlackjackGame() {
                       {player.isBlackjack && (
                         <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
                       )}
-                    </div>
-                  )}
-                  {/* Bet display */}
-                  {player.bet > 0 && (
-                    <div className="flex items-center justify-center space-x-1 mt-1">
-                      <span className="text-blue-600 font-bold text-sm">🎯 Bahis:</span>
-                      <span className="text-blue-700 font-bold text-lg">{formatChips(player.bet)}</span>
                     </div>
                   )}
                   {player.winnings !== undefined && player.winnings > 0 && (
@@ -845,7 +605,7 @@ export default function BlackjackGame() {
         {gameState.gameState === 'waiting' as string && (
           <div className="text-center">
             <button
-              onClick={() => setShowBetPlacement(true)}
+              onClick={startGame}
               disabled={isLoading}
               className={`px-8 py-4 rounded-xl font-bold text-lg shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-200 border-2 ${
                 isLoading
@@ -1125,18 +885,6 @@ export default function BlackjackGame() {
         preload="auto"
         style={{ display: 'none' }}
       />
-
-      {/* Bet Placement Modal */}
-      {showBetPlacement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <BetPlacement
-            onBetPlaced={handleBetPlaced}
-            onCancel={() => setShowBetPlacement(false)}
-            minBet={10}
-            maxBet={Math.min(1000, userChips?.balance || 0)}
-          />
-        </div>
-      )}
     </div>
   );
 }

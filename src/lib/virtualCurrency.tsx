@@ -1,446 +1,452 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from './auth';
+import { supabase } from './supabase';
 
-export interface UserChips {
+interface UserProfile {
   id: string;
-  user_id: string;
-  balance: number;
-  total_earned: number;
-  total_spent: number;
-  total_lost: number;
-  created_at: string;
-  updated_at: string;
+  username: string;
+  chips: number;
+  total_winnings: number;
+  total_losses: number;
+  games_played: number;
 }
 
-export interface GameSession {
+interface GameRoom {
   id: string;
-  room_id: string;
   game_type: string;
-  dealer_balance: number;
-  status: 'active' | 'finished';
-  created_at: string;
-  updated_at: string;
+  house_chips: number;
+  status: string;
 }
 
-export interface Bet {
+interface ChipTransaction {
   id: string;
-  user_id: string;
-  session_id: string;
+  transaction_type: 'deposit' | 'win' | 'loss' | 'bet';
   amount: number;
-  game_type: string;
-  room_id: string;
-  status: 'active' | 'won' | 'lost' | 'pushed';
-  payout_amount: number;
+  balance_before: number;
+  balance_after: number;
+  description?: string;
   created_at: string;
-  updated_at: string;
 }
 
 interface VirtualCurrencyContextType {
-  userChips: UserChips | null;
-  gameSession: GameSession | null;
+  userProfile: UserProfile | null;
   loading: boolean;
-  error: string | null;
-
-  // User chip operations
   depositChips: (amount: number) => Promise<boolean>;
-  getUserChips: () => Promise<void>;
-
-  // Game session operations
-  createGameSession: (roomId: string, gameType: string) => Promise<GameSession | null>;
-  getGameSession: (roomId: string, gameType: string) => Promise<GameSession | null>;
-  updateDealerBalance: (sessionId: string, newBalance: number) => Promise<boolean>;
-
-  // Bet operations
-  placeBet: (sessionId: string, amount: number, gameType: string, roomId: string) => Promise<Bet | null>;
-  resolveBet: (betId: string, won: boolean, payoutAmount?: number) => Promise<boolean>;
-  getActiveBets: (roomId: string, gameType: string) => Promise<Bet[]>;
-
-  // Utility functions
-  canAffordBet: (amount: number) => boolean;
-  formatChips: (amount: number) => string;
+  placeBet: (roomId: string, amount: number) => Promise<string | null>;
+  processWin: (roomId: string, sessionId: string, winType: 'normal' | 'blackjack') => Promise<boolean>;
+  processLoss: (roomId: string, sessionId: string) => Promise<boolean>;
+  getGameRoom: (roomId: string, gameType: string) => Promise<GameRoom | null>;
+  getUserTransactions: (limit?: number) => Promise<ChipTransaction[]>;
+  refreshProfile: () => Promise<void>;
 }
 
 const VirtualCurrencyContext = createContext<VirtualCurrencyContextType | undefined>(undefined);
 
 export function VirtualCurrencyProvider({ children }: { children: React.ReactNode }) {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const [userChips, setUserChips] = useState<UserChips | null>(null);
-  const [gameSession, setGameSession] = useState<GameSession | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Get user chips
-  const getUserChips = async () => {
+  // Kullanıcı profilini yükle
+  const loadUserProfile = async () => {
+    if (!user) {
+      setUserProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Profile yükleme hatası:', error);
+        // Eğer profil yoksa oluştur
+        if (error.code === 'PGRST116') {
+          await createUserProfile();
+        }
+      } else {
+        setUserProfile(data);
+      }
+    } catch (error) {
+      console.error('Profile yükleme hatası:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Kullanıcı profili oluştur
+  const createUserProfile = async () => {
     if (!user) return;
 
     try {
-      setLoading(true);
       const { data, error } = await supabase
-        .from('user_chips')
-        .select('*')
-        .eq('user_id', user.id)
+        .from('user_profiles')
+        .insert({
+          id: user.id,
+          username: user.user_metadata?.username || user.email?.split('@')[0] || 'Oyuncu',
+          chips: 1000
+        })
+        .select()
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        throw error;
-      }
-
-      if (data) {
-        setUserChips(data);
+      if (error) {
+        console.error('Profil oluşturma hatası:', error);
       } else {
-        // Create initial chips for new user
-        const { data: newChips, error: insertError } = await supabase
-          .from('user_chips')
-          .insert([{ user_id: user.id, balance: 1000 }])
+        setUserProfile(data);
+      }
+    } catch (error) {
+      console.error('Profil oluşturma hatası:', error);
+    }
+  };
+
+  // Chip yatırma (ücretsiz)
+  const depositChips = async (amount: number): Promise<boolean> => {
+    if (!user || !userProfile) return false;
+
+    try {
+      const newBalance = userProfile.chips + amount;
+
+      // Profili güncelle
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ chips: newBalance })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // İşlemi kaydet
+      const { error: transactionError } = await supabase
+        .from('chip_transactions')
+        .insert({
+          user_id: user.id,
+          transaction_type: 'deposit',
+          amount: amount,
+          balance_before: userProfile.chips,
+          balance_after: newBalance,
+          description: `${amount} chip yatırıldı`
+        });
+
+      if (transactionError) throw transactionError;
+
+      // Local state'i güncelle
+      setUserProfile(prev => prev ? { ...prev, chips: newBalance } : null);
+      return true;
+    } catch (error) {
+      console.error('Chip yatırma hatası:', error);
+      return false;
+    }
+  };
+
+  // Oyun odası al veya oluştur
+  const getGameRoom = async (roomId: string, gameType: string): Promise<GameRoom | null> => {
+    try {
+      // Önce oda var mı kontrol et
+      let { data: room, error } = await supabase
+        .from('game_rooms')
+        .select('*')
+        .eq('id', roomId)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // Oda yoksa oluştur
+        const { data: newRoom, error: createError } = await supabase
+          .from('game_rooms')
+          .insert({
+            id: roomId,
+            game_type: gameType,
+            house_chips: 10000
+          })
           .select()
           .single();
 
-        if (insertError) throw insertError;
-        setUserChips(newChips);
+        if (createError) throw createError;
+        return newRoom;
+      } else if (error) {
+        throw error;
       }
-    } catch (err) {
-      console.error('Error getting user chips:', err);
-      setError('Chip bilgileri alınamadı');
-    } finally {
-      setLoading(false);
+
+      return room;
+    } catch (error) {
+      console.error('Oda alma/oluşturma hatası:', error);
+      return null;
     }
   };
 
-  // Deposit chips (free for now)
-  const depositChips = async (amount: number): Promise<boolean> => {
-    if (!user || !userChips) return false;
+  // Bahis yapma
+  const placeBet = async (roomId: string, amount: number): Promise<string | null> => {
+    if (!user || !userProfile || userProfile.chips < amount) return null;
 
     try {
-      setLoading(true);
-      const newBalance = userChips.balance + amount;
+      const newBalance = userProfile.chips - amount;
 
-      const { data, error } = await supabase
-        .from('user_chips')
-        .update({
-          balance: newBalance,
-          total_earned: userChips.total_earned + amount
-        })
-        .eq('user_id', user.id)
-        .select()
-        .single();
+      // Profili güncelle
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ chips: newBalance })
+        .eq('id', user.id);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
 
-      setUserChips(data);
-
-      // Record transaction
-      await supabase.from('transactions').insert([{
-        user_id: user.id,
-        type: 'deposit',
-        amount: amount,
-        balance_before: userChips.balance,
-        balance_after: newBalance,
-        description: `Free chip deposit: ${amount} chips`
-      }]);
-
-      return true;
-    } catch (err) {
-      console.error('Error depositing chips:', err);
-      setError('Chip yatırma işlemi başarısız');
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Create game session
-  const createGameSession = async (roomId: string, gameType: string): Promise<GameSession | null> => {
-    try {
-      setLoading(true);
-
-      // Check if session already exists
-      const { data: existingSession } = await supabase
+      // Oyun seansını oluştur
+      const { data: session, error: sessionError } = await supabase
         .from('game_sessions')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('game_type', gameType)
-        .eq('status', 'active')
-        .single();
-
-      if (existingSession) {
-        setGameSession(existingSession);
-        return existingSession;
-      }
-
-      // Create new session
-      const { data, error } = await supabase
-        .from('game_sessions')
-        .insert([{
+        .insert({
           room_id: roomId,
-          game_type: gameType,
-          dealer_balance: 10000
-        }])
+          user_id: user.id,
+          bet_amount: amount,
+          chips_before: userProfile.chips,
+          chips_after: newBalance
+        })
         .select()
         .single();
 
-      if (error) throw error;
+      if (sessionError) throw sessionError;
 
-      setGameSession(data);
-      return data;
-    } catch (err) {
-      console.error('Error creating game session:', err);
-      setError('Oyun oturumu oluşturulamadı');
+      // İşlemi kaydet
+      const { error: transactionError } = await supabase
+        .from('chip_transactions')
+        .insert({
+          user_id: user.id,
+          transaction_type: 'bet',
+          amount: -amount,
+          balance_before: userProfile.chips,
+          balance_after: newBalance,
+          game_session_id: session.id,
+          description: `${amount} chip bahis yapıldı`
+        });
+
+      if (transactionError) throw transactionError;
+
+      // Local state'i güncelle
+      setUserProfile(prev => prev ? { ...prev, chips: newBalance } : null);
+      return session.id;
+    } catch (error) {
+      console.error('Bahis yapma hatası:', error);
       return null;
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Get game session
-  const getGameSession = async (roomId: string, gameType: string): Promise<GameSession | null> => {
+  // Kazanma işlemi
+  const processWin = async (roomId: string, sessionId: string, winType: 'normal' | 'blackjack'): Promise<boolean> => {
+    if (!user || !userProfile) return false;
+
     try {
-      const { data, error } = await supabase
+      // Oyun seansını al
+      const { data: session, error: sessionError } = await supabase
         .from('game_sessions')
         .select('*')
-        .eq('room_id', roomId)
-        .eq('game_type', gameType)
-        .eq('status', 'active')
+        .eq('id', sessionId)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (sessionError) throw sessionError;
 
-      if (data) {
-        setGameSession(data);
-        return data;
-      }
+      // Kazanç hesapla (normal: 2x, blackjack: 2.5x)
+      const multiplier = winType === 'blackjack' ? 2.5 : 2;
+      const winAmount = Math.floor(session.bet_amount * multiplier);
+      const newBalance = userProfile.chips + winAmount;
 
-      return null;
-    } catch (err) {
-      console.error('Error getting game session:', err);
-      return null;
-    }
-  };
+      // Profili güncelle
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ 
+          chips: newBalance,
+          total_winnings: userProfile.total_winnings + winAmount,
+          games_played: userProfile.games_played + 1
+        })
+        .eq('id', user.id);
 
-  // Update dealer balance
-  const updateDealerBalance = async (sessionId: string, newBalance: number): Promise<boolean> => {
-    try {
-      const { error } = await supabase
+      if (profileError) throw profileError;
+
+      // Oyun seansını güncelle
+      const { error: updateSessionError } = await supabase
         .from('game_sessions')
-        .update({ dealer_balance: newBalance })
+        .update({
+          result: winType,
+          payout: winAmount,
+          chips_after: newBalance
+        })
         .eq('id', sessionId);
 
-      if (error) throw error;
+      if (updateSessionError) throw updateSessionError;
 
-      if (gameSession) {
-        setGameSession({ ...gameSession, dealer_balance: newBalance });
-      }
+      // Kasa chiplerini güncelle
+      const { data: roomData, error: getRoomError } = await supabase
+        .from('game_rooms')
+        .select('house_chips')
+        .eq('id', roomId)
+        .single();
 
-      return true;
-    } catch (err) {
-      console.error('Error updating dealer balance:', err);
-      return false;
-    }
-  };
+      if (getRoomError) throw getRoomError;
 
-  // Place bet
-  const placeBet = async (sessionId: string, amount: number, gameType: string, roomId: string): Promise<Bet | null> => {
-    if (!user || !userChips || userChips.balance < amount) return null;
-
-    try {
-      setLoading(true);
-
-      // Deduct from user balance
-      const newBalance = userChips.balance - amount;
-      const { error: updateError } = await supabase
-        .from('user_chips')
+      const { error: houseError } = await supabase
+        .from('game_rooms')
         .update({
-          balance: newBalance,
-          total_spent: userChips.total_spent + amount
+          house_chips: roomData.house_chips - winAmount
         })
-        .eq('user_id', user.id);
+        .eq('id', roomId);
 
-      if (updateError) throw updateError;
+      if (houseError) throw houseError;
 
-      // Create bet record
-      const { data: bet, error: betError } = await supabase
-        .from('bets')
-        .insert([{
+      // İşlemi kaydet
+      const { error: transactionError } = await supabase
+        .from('chip_transactions')
+        .insert({
           user_id: user.id,
-          session_id: sessionId,
-          amount: amount,
-          game_type: gameType,
-          room_id: roomId
-        }])
-        .select()
-        .single();
+          transaction_type: 'win',
+          amount: winAmount,
+          balance_before: userProfile.chips,
+          balance_after: newBalance,
+          game_session_id: sessionId,
+          description: `${winType === 'blackjack' ? 'Blackjack' : 'Normal'} kazanç: ${winAmount} chip`
+        });
 
-      if (betError) throw betError;
+      if (transactionError) throw transactionError;
 
-      // Update local state
-      setUserChips({ ...userChips, balance: newBalance });
-
-      // Record transaction
-      await supabase.from('transactions').insert([{
-        user_id: user.id,
-        type: 'bet',
-        amount: -amount,
-        balance_before: userChips.balance,
-        balance_after: newBalance,
-        game_type: gameType,
-        room_id: roomId,
-        description: `Bet placed: ${amount} chips`
-      }]);
-
-      return bet;
-    } catch (err) {
-      console.error('Error placing bet:', err);
-      setError('Bahis yerleştirilemedi');
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Resolve bet
-  const resolveBet = async (betId: string, won: boolean, payoutAmount: number = 0): Promise<boolean> => {
-    if (!user || !userChips) return false;
-
-    try {
-      setLoading(true);
-
-      // Get the bet details to know the original bet amount
-      const { data: betData, error: betFetchError } = await supabase
-        .from('bets')
-        .select('amount, room_id')
-        .eq('id', betId)
-        .single();
-
-      if (betFetchError) throw betFetchError;
-
-      const originalBetAmount = betData?.amount || 0;
-      const roomId = betData?.room_id || '';
-      let newBalance = userChips.balance;
-
-      if (won) {
-        // Kazanırsa kazanç eklenir (bahis zaten düşülmüş)
-        newBalance = userChips.balance + payoutAmount;
-      } else {
-        // Kaybederse bahis zaten düşülmüş, hiçbir şey yapılmaz
-        // Beraberlik durumunda bahis geri verilir
-        const isTie = payoutAmount === originalBetAmount;
-        if (isTie) {
-          newBalance = userChips.balance + originalBetAmount;
-        }
-      }
-
-      // Update bet status
-      const { error: betError } = await supabase
-        .from('bets')
-        .update({
-          status: won ? 'won' : 'lost',
-          payout_amount: payoutAmount
-        })
-        .eq('id', betId);
-
-      if (betError) throw betError;
-
-      // Update user balance
-      const { error: updateError } = await supabase
-        .from('user_chips')
-        .update({
-          balance: newBalance,
-          total_earned: won ? userChips.total_earned + payoutAmount : userChips.total_earned,
-          total_lost: !won ? userChips.total_lost + originalBetAmount : userChips.total_lost
-        })
-        .eq('user_id', user.id);
-
-      if (updateError) throw updateError;
-
-      setUserChips({
-        ...userChips,
-        balance: newBalance,
-        total_earned: won ? userChips.total_earned + payoutAmount : userChips.total_earned,
-        total_lost: !won ? userChips.total_lost + originalBetAmount : userChips.total_lost
-      });
-
-      // Record transaction
-      await supabase.from('transactions').insert([{
-        user_id: user.id,
-        type: won ? 'win' : 'loss',
-        amount: won ? payoutAmount : -originalBetAmount,
-        balance_before: userChips.balance,
-        balance_after: newBalance,
-        game_type: 'blackjack',
-        room_id: roomId,
-        description: won ? `Bet won: ${payoutAmount} chips` : `Bet lost: ${originalBetAmount} chips`
-      }]);
+      // Local state'i güncelle
+      setUserProfile(prev => prev ? { 
+        ...prev, 
+        chips: newBalance,
+        total_winnings: prev.total_winnings + winAmount,
+        games_played: prev.games_played + 1
+      } : null);
 
       return true;
-    } catch (err) {
-      console.error('Error resolving bet:', err);
-      setError('Bahis sonucu işlenemedi');
+    } catch (error) {
+      console.error('Kazanç işlemi hatası:', error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Get active bets
-  const getActiveBets = async (roomId: string, gameType: string): Promise<Bet[]> => {
+  // Kaybetme işlemi
+  const processLoss = async (roomId: string, sessionId: string): Promise<boolean> => {
+    if (!user || !userProfile) return false;
+
+    try {
+      // Oyun seansını al
+      const { data: session, error: sessionError } = await supabase
+        .from('game_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+
+      if (sessionError) throw sessionError;
+
+      // Profili güncelle
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ 
+          total_losses: userProfile.total_losses + session.bet_amount,
+          games_played: userProfile.games_played + 1
+        })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Oyun seansını güncelle
+      const { error: updateSessionError } = await supabase
+        .from('game_sessions')
+        .update({
+          result: 'loss',
+          payout: 0
+        })
+        .eq('id', sessionId);
+
+      if (updateSessionError) throw updateSessionError;
+
+      // Kasa chiplerini güncelle
+      const { data: roomData, error: getRoomError } = await supabase
+        .from('game_rooms')
+        .select('house_chips')
+        .eq('id', roomId)
+        .single();
+
+      if (getRoomError) throw getRoomError;
+
+      const { error: houseError } = await supabase
+        .from('game_rooms')
+        .update({
+          house_chips: roomData.house_chips + session.bet_amount
+        })
+        .eq('id', roomId);
+
+      if (houseError) throw houseError;
+
+      // İşlemi kaydet
+      const { error: transactionError } = await supabase
+        .from('chip_transactions')
+        .insert({
+          user_id: user.id,
+          transaction_type: 'loss',
+          amount: -session.bet_amount,
+          balance_before: session.chips_before,
+          balance_after: userProfile.chips,
+          game_session_id: sessionId,
+          description: `Kayıp: ${session.bet_amount} chip`
+        });
+
+      if (transactionError) throw transactionError;
+
+      // Local state'i güncelle
+      setUserProfile(prev => prev ? { 
+        ...prev,
+        total_losses: prev.total_losses + session.bet_amount,
+        games_played: prev.games_played + 1
+      } : null);
+
+      return true;
+    } catch (error) {
+      console.error('Kayıp işlemi hatası:', error);
+      return false;
+    }
+  };
+
+  // İşlem geçmişini al
+  const getUserTransactions = async (limit: number = 10): Promise<ChipTransaction[]> => {
     if (!user) return [];
 
     try {
       const { data, error } = await supabase
-        .from('bets')
+        .from('chip_transactions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('room_id', roomId)
-        .eq('game_type', gameType)
-        .eq('status', 'active');
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
       if (error) throw error;
       return data || [];
-    } catch (err) {
-      console.error('Error getting active bets:', err);
+    } catch (error) {
+      console.error('İşlem geçmişi alma hatası:', error);
       return [];
     }
   };
 
-  // Utility functions
-  const canAffordBet = (amount: number): boolean => {
-    return userChips ? userChips.balance >= amount : false;
+  // Profili yenile
+  const refreshProfile = async () => {
+    await loadUserProfile();
   };
 
-  const formatChips = (amount: number): string => {
-    return new Intl.NumberFormat('tr-TR').format(amount);
-  };
-
-  // Load user chips when user changes
   useEffect(() => {
-    if (user) {
-      getUserChips();
-    } else {
-      setUserChips(null);
-    }
+    loadUserProfile();
   }, [user]);
 
-  const value: VirtualCurrencyContextType = {
-    userChips,
-    gameSession,
-    loading,
-    error,
-    depositChips,
-    getUserChips,
-    createGameSession,
-    getGameSession,
-    updateDealerBalance,
-    placeBet,
-    resolveBet,
-    getActiveBets,
-    canAffordBet,
-    formatChips
-  };
-
   return (
-    <VirtualCurrencyContext.Provider value={value}>
+    <VirtualCurrencyContext.Provider value={{
+      userProfile,
+      loading,
+      depositChips,
+      placeBet,
+      processWin,
+      processLoss,
+      getGameRoom,
+      getUserTransactions,
+      refreshProfile
+    }}>
       {children}
     </VirtualCurrencyContext.Provider>
   );

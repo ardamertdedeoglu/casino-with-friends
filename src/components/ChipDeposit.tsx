@@ -4,15 +4,16 @@ import { useState } from 'react';
 import { useVirtualCurrency } from '../lib/virtualCurrency';
 
 interface ChipDepositProps {
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export default function ChipDeposit({ onClose }: ChipDepositProps) {
-  const { userChips, depositChips, loading, formatChips } = useVirtualCurrency();
-  const [amount, setAmount] = useState<number>(100);
+  const [amount, setAmount] = useState<number>(1000);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const { userProfile, depositChips, refreshProfile } = useVirtualCurrency();
 
-  const quickAmounts = [100, 500, 1000, 2500, 5000];
+  const predefinedAmounts = [500, 1000, 2500, 5000, 10000];
 
   const handleDeposit = async () => {
     if (amount <= 0) {
@@ -20,109 +21,115 @@ export default function ChipDeposit({ onClose }: ChipDepositProps) {
       return;
     }
 
+    setLoading(true);
     setMessage('');
-    const success = await depositChips(amount);
 
-    if (success) {
-      setMessage(`✅ ${formatChips(amount)} chip başarıyla yatırıldı!`);
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    } else {
-      setMessage('❌ Chip yatırma işlemi başarısız oldu');
+    try {
+      const success = await depositChips(amount);
+      if (success) {
+        setMessage(`${amount.toLocaleString()} chip başarıyla hesabınıza eklendi! 🎉`);
+        await refreshProfile();
+        setTimeout(() => {
+          onClose?.();
+        }, 2000);
+      } else {
+        setMessage('Chip yatırma işlemi başarısız oldu. Lütfen tekrar deneyin.');
+      }
+    } catch (error) {
+      setMessage('Bir hata oluştu. Lütfen tekrar deneyin.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">💰 Chip Yatırma</h2>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-700 text-2xl"
-        >
-          ×
-        </button>
-      </div>
-
-      {/* Current Balance */}
-      <div className="bg-gradient-to-r from-yellow-100 to-yellow-200 p-4 rounded-xl mb-6">
-        <div className="text-center">
-          <p className="text-sm text-gray-600 mb-1">Mevcut Bakiye</p>
-          <p className="text-2xl font-bold text-yellow-800">
-            {userChips ? formatChips(userChips.balance) : '0'} 💰
+    <div className="bg-gradient-to-br from-green-700 via-green-800 to-green-900 p-8 rounded-3xl shadow-2xl border-4 border-yellow-400 max-w-md w-full mx-auto">
+      <div className="text-center mb-6">
+        <div className="text-6xl mb-4">💰</div>
+        <h2 className="text-3xl font-bold text-yellow-400 mb-2">Chip Yatır</h2>
+        <div className="bg-black bg-opacity-30 rounded-xl p-4 mb-4">
+          <p className="text-yellow-200 text-lg font-semibold">
+            Mevcut Bakiye: <span className="text-yellow-400">{userProfile?.chips.toLocaleString() || 0}</span> 💎
           </p>
         </div>
+        <p className="text-green-200 text-sm">
+          💡 Şu an için ücretsiz! Dilediğiniz kadar chip alabilirsiniz.
+        </p>
       </div>
 
-      {/* Quick Amount Buttons */}
+      {/* Hızlı Seçim Butonları */}
       <div className="mb-6">
-        <p className="text-sm font-semibold text-gray-700 mb-3">Hızlı Miktar:</p>
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          {quickAmounts.map((quickAmount) => (
+        <label className="block text-yellow-300 font-bold mb-3 text-center">Hızlı Seçim</label>
+        <div className="grid grid-cols-3 gap-2">
+          {predefinedAmounts.map((preset) => (
             <button
-              key={quickAmount}
-              onClick={() => setAmount(quickAmount)}
-              className={`p-3 rounded-xl font-bold text-sm transition-all duration-200 ${
-                amount === quickAmount
-                  ? 'bg-yellow-500 text-white shadow-lg transform scale-105'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              key={preset}
+              onClick={() => setAmount(preset)}
+              className={`p-3 rounded-xl font-bold transition-all duration-200 ${
+                amount === preset
+                  ? 'bg-yellow-500 text-black border-2 border-yellow-300'
+                  : 'bg-green-600 text-white border-2 border-green-500 hover:bg-green-500'
               }`}
             >
-              {formatChips(quickAmount)}
+              {preset.toLocaleString()}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Custom Amount Input */}
+      {/* Manuel Miktar Girişi */}
       <div className="mb-6">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
-          Özel Miktar:
-        </label>
+        <label className="block text-yellow-300 font-bold mb-2">💎 Chip Miktarı</label>
         <input
           type="number"
-          value={amount}
-          onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
-          className="w-full p-4 border-2 border-gray-300 rounded-xl text-lg font-semibold focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none"
-          placeholder="Chip miktarı"
           min="1"
+          step="1"
+          value={amount}
+          onChange={(e) => setAmount(Math.max(1, parseInt(e.target.value) || 0))}
+          className="w-full p-4 bg-black bg-opacity-50 border-3 border-yellow-500 rounded-xl text-yellow-100 text-xl font-bold text-center placeholder:text-gray-400 focus:border-yellow-300 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200"
+          placeholder="Miktar girin..."
         />
       </div>
 
-      {/* Message */}
+      {/* Mesaj */}
       {message && (
-        <div className={`p-4 rounded-xl mb-4 text-center font-semibold ${
-          message.includes('✅')
-            ? 'bg-green-100 text-green-800'
-            : 'bg-red-100 text-red-800'
+        <div className={`mb-4 p-3 rounded-xl text-center font-semibold ${
+          message.includes('başarıyla') 
+            ? 'bg-green-600 text-white' 
+            : 'bg-red-600 text-white'
         }`}>
           {message}
         </div>
       )}
 
-      {/* Action Buttons */}
+      {/* Butonlar */}
       <div className="flex gap-3">
         <button
           onClick={handleDeposit}
           disabled={loading || amount <= 0}
-          className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl font-bold text-lg hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+          className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black px-6 py-4 rounded-xl font-bold text-lg hover:from-yellow-400 hover:to-yellow-500 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-yellow-400"
         >
-          {loading ? '⏳ Yatırılıyor...' : `💰 ${formatChips(amount)} Yatır`}
+          {loading ? '⏳ Ekleniyor...' : '💰 Chip Yatır'}
         </button>
-        <button
-          onClick={onClose}
-          className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white p-4 rounded-xl font-bold text-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
-        >
-          İptal
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="flex-1 bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-4 rounded-xl font-bold text-lg hover:from-gray-700 hover:to-gray-800 transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-gray-500"
+          >
+            ❌ İptal
+          </button>
+        )}
       </div>
 
-      {/* Info */}
-      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-        <p className="text-xs text-blue-700 text-center">
-          💡 Şu anda ücretsiz chip yatırma aktif! Daha sonra gerçek para sistemi eklenecek.
-        </p>
+      {/* Açıklama */}
+      <div className="mt-6 bg-black bg-opacity-20 rounded-xl p-4">
+        <h3 className="text-yellow-300 font-bold mb-2 text-center">ℹ️ Bilgi</h3>
+        <ul className="text-green-200 text-sm space-y-1">
+          <li>• Chip'ler sadece oyun içinde kullanılabilir</li>
+          <li>• Kazandığınız chip'ler hesabınızda kalıcı olarak durur</li>
+          <li>• Bahis yaparken mevcut bakiyenizi kontrol edin</li>
+          <li>• Blackjack'te kazanırsan bahisinin 2 katını alırsın!</li>
+        </ul>
       </div>
     </div>
   );

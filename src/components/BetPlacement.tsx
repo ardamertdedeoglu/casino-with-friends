@@ -4,159 +4,200 @@ import { useState } from 'react';
 import { useVirtualCurrency } from '../lib/virtualCurrency';
 
 interface BetPlacementProps {
-  onBetPlaced: (betAmount: number) => void;
-  onCancel: () => void;
+  roomId: string;
+  gameType: string;
+  onBetPlaced: (amount: number, sessionId: string) => void;
+  onClose?: () => void;
   minBet?: number;
   maxBet?: number;
 }
 
-export default function BetPlacement({
-  onBetPlaced,
-  onCancel,
+export default function BetPlacement({ 
+  roomId, 
+  gameType, 
+  onBetPlaced, 
+  onClose,
   minBet = 10,
-  maxBet = 1000
+  maxBet = 1000 
 }: BetPlacementProps) {
-  const { userChips, canAffordBet, formatChips } = useVirtualCurrency();
   const [betAmount, setBetAmount] = useState<number>(minBet);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const { userProfile, placeBet, getGameRoom } = useVirtualCurrency();
 
-  const quickAmounts = [10, 25, 50, 100, 250, 500];
+  const [gameRoom, setGameRoom] = useState<any>(null);
 
-  const handleBetAmountChange = (amount: number) => {
-    setError('');
+  // Oyun odasını yükle
+  useState(() => {
+    const loadRoom = async () => {
+      const room = await getGameRoom(roomId, gameType);
+      setGameRoom(room);
+    };
+    loadRoom();
+  });
 
-    if (amount < minBet) {
-      setError(`Minimum bahis: ${formatChips(minBet)} chip`);
+  const quickBetAmounts = [minBet, 25, 50, 100, 250, 500];
+
+  const handlePlaceBet = async () => {
+    if (!userProfile) {
+      setMessage('Kullanıcı bilgileri yüklenemedi');
       return;
     }
 
-    if (amount > maxBet) {
-      setError(`Maksimum bahis: ${formatChips(maxBet)} chip`);
-      return;
-    }
-
-    if (!canAffordBet(amount)) {
-      setError('Yetersiz bakiye!');
-      return;
-    }
-
-    setBetAmount(amount);
-  };
-
-  const handlePlaceBet = () => {
     if (betAmount < minBet || betAmount > maxBet) {
-      setError(`Bahis miktarı ${formatChips(minBet)} - ${formatChips(maxBet)} arasında olmalı`);
+      setMessage(`Bahis ${minBet}-${maxBet} chip arasında olmalıdır`);
       return;
     }
 
-    if (!canAffordBet(betAmount)) {
-      setError('Yetersiz bakiye!');
+    if (betAmount > userProfile.chips) {
+      setMessage('Yetersiz bakiye! Daha fazla chip yatırın.');
       return;
     }
 
-    onBetPlaced(betAmount);
+    setLoading(true);
+    setMessage('');
+
+    try {
+      // Bahis yap ve session ID'yi al
+      const sessionId = await placeBet(roomId, betAmount);
+      
+      if (sessionId) {
+        setMessage('Bahis başarıyla yerleştirildi! 🎯');
+        onBetPlaced(betAmount, sessionId);
+      } else {
+        setMessage('Bahis yerleştirilemedi. Lütfen tekrar deneyin.');
+      }
+    } catch (error) {
+      setMessage('Bir hata oluştu. Lütfen tekrar deneyin.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const maxPossibleBet = Math.min(maxBet, userChips?.balance || 0);
+  if (!userProfile) {
+    return (
+      <div className="bg-gradient-to-br from-red-700 via-red-800 to-red-900 p-8 rounded-3xl shadow-2xl border-4 border-red-400 max-w-md w-full mx-auto text-center">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h2 className="text-2xl font-bold text-red-200 mb-4">Profil Yüklenemedi</h2>
+        <p className="text-red-300">Lütfen sayfayı yenileyin veya tekrar giriş yapın.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+    <div className="bg-gradient-to-br from-purple-700 via-purple-800 to-purple-900 p-8 rounded-3xl shadow-2xl border-4 border-yellow-400 max-w-md w-full mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">🎯 Bahis Yap</h2>
-        <p className="text-gray-600">Oyun başlamadan önce bahis miktarınızı belirleyin</p>
-      </div>
-
-      {/* Current Balance */}
-      <div className="bg-gradient-to-r from-yellow-100 to-yellow-200 p-4 rounded-xl mb-6">
-        <div className="text-center">
-          <p className="text-sm text-gray-600 mb-1">Mevcut Bakiye</p>
-          <p className="text-2xl font-bold text-yellow-800">
-            {userChips ? formatChips(userChips.balance) : '0'} 💰
+        <div className="text-6xl mb-4">🎯</div>
+        <h2 className="text-3xl font-bold text-yellow-400 mb-2">Bahis Yap</h2>
+        <div className="bg-black bg-opacity-30 rounded-xl p-4 mb-4">
+          <p className="text-yellow-200 text-lg font-semibold">
+            Bakiyeniz: <span className="text-yellow-400">{userProfile.chips.toLocaleString()}</span> 💎
           </p>
+          {gameRoom && (
+            <p className="text-purple-200 text-sm mt-2">
+              Kasa: <span className="text-purple-300">{gameRoom.house_chips.toLocaleString()}</span> 💰
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Bet Amount Display */}
-      <div className="text-center mb-6">
-        <p className="text-sm text-gray-600 mb-2">Bahis Miktarı</p>
-        <div className="text-4xl font-bold text-green-600">
-          {formatChips(betAmount)} 💰
-        </div>
-      </div>
-
-      {/* Quick Amount Buttons */}
+      {/* Hızlı Bahis Butonları */}
       <div className="mb-6">
-        <p className="text-sm font-semibold text-gray-700 mb-3">Hızlı Bahis:</p>
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          {quickAmounts.map((amount) => (
+        <label className="block text-yellow-300 font-bold mb-3 text-center">Hızlı Bahis</label>
+        <div className="grid grid-cols-3 gap-2">
+          {quickBetAmounts.map((amount) => (
             <button
               key={amount}
-              onClick={() => handleBetAmountChange(amount)}
-              disabled={!canAffordBet(amount) || amount > maxBet}
-              className={`p-3 rounded-xl font-bold text-sm transition-all duration-200 ${
+              onClick={() => setBetAmount(amount)}
+              disabled={amount > userProfile.chips}
+              className={`p-3 rounded-xl font-bold transition-all duration-200 ${
                 betAmount === amount
-                  ? 'bg-green-500 text-white shadow-lg transform scale-105'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed'
+                  ? 'bg-yellow-500 text-black border-2 border-yellow-300'
+                  : amount > userProfile.chips
+                  ? 'bg-gray-600 text-gray-400 border-2 border-gray-500 cursor-not-allowed'
+                  : 'bg-purple-600 text-white border-2 border-purple-500 hover:bg-purple-500'
               }`}
             >
-              {formatChips(amount)}
+              {amount}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Custom Bet Input */}
+      {/* Manuel Bahis Girişi */}
       <div className="mb-6">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
-          Özel Bahis Miktarı:
-        </label>
+        <label className="block text-yellow-300 font-bold mb-2">💰 Bahis Miktarı</label>
         <input
           type="number"
-          value={betAmount}
-          onChange={(e) => handleBetAmountChange(parseInt(e.target.value) || 0)}
-          className="w-full p-4 border-2 border-gray-300 rounded-xl text-lg font-semibold focus:border-green-500 focus:ring-4 focus:ring-green-200 focus:outline-none"
-          placeholder="Bahis miktarı"
           min={minBet}
-          max={maxPossibleBet}
+          max={Math.min(maxBet, userProfile.chips)}
+          step="1"
+          value={betAmount}
+          onChange={(e) => {
+            const value = parseInt(e.target.value) || minBet;
+            setBetAmount(Math.min(Math.max(value, minBet), Math.min(maxBet, userProfile.chips)));
+          }}
+          className="w-full p-4 bg-black bg-opacity-50 border-3 border-yellow-500 rounded-xl text-yellow-100 text-xl font-bold text-center placeholder:text-gray-400 focus:border-yellow-300 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200"
+          placeholder="Bahis miktarı..."
         />
-        <p className="text-xs text-gray-500 mt-1">
-          Min: {formatChips(minBet)} - Max: {formatChips(maxPossibleBet)}
-        </p>
+        <div className="flex justify-between text-sm text-purple-200 mt-2">
+          <span>Min: {minBet}</span>
+          <span>Max: {Math.min(maxBet, userProfile.chips)}</span>
+        </div>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-4 text-center font-semibold">
-          {error}
+      {/* Kazanç Hesaplaması */}
+      <div className="mb-6 bg-black bg-opacity-20 rounded-xl p-4">
+        <h3 className="text-yellow-300 font-bold mb-2 text-center">📈 Potansiyel Kazanç</h3>
+        <div className="space-y-2 text-center">
+          <p className="text-green-300">
+            Normal Kazanç: <span className="font-bold">{(betAmount * 2).toLocaleString()}</span> 💎
+          </p>
+          <p className="text-yellow-300">
+            Blackjack: <span className="font-bold">{Math.floor(betAmount * 2.5).toLocaleString()}</span> 💎
+          </p>
+        </div>
+      </div>
+
+      {/* Mesaj */}
+      {message && (
+        <div className={`mb-4 p-3 rounded-xl text-center font-semibold ${
+          message.includes('başarıyla') 
+            ? 'bg-green-600 text-white' 
+            : 'bg-red-600 text-white'
+        }`}>
+          {message}
         </div>
       )}
 
-      {/* Potential Winnings */}
-      <div className="bg-blue-50 p-4 rounded-xl mb-6">
-        <div className="text-center">
-          <p className="text-sm text-blue-700 mb-1">Potansiyel Kazanç</p>
-          <p className="text-xl font-bold text-blue-800">
-            {formatChips(betAmount * 2)} 💰
-          </p>
-          <p className="text-xs text-blue-600">Blackjack&apos;de kazanç 2 katıdır</p>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
+      {/* Butonlar */}
       <div className="flex gap-3">
         <button
           onClick={handlePlaceBet}
-          disabled={!!error || !canAffordBet(betAmount)}
-          className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl font-bold text-lg hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+          disabled={loading || betAmount > userProfile.chips || betAmount < minBet}
+          className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:from-green-600 hover:to-green-700 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-400"
         >
-          🎯 Bahis Yap
+          {loading ? '⏳ Bahis Yapılıyor...' : '🎯 Bahis Yap'}
         </button>
-        <button
-          onClick={onCancel}
-          className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white p-4 rounded-xl font-bold text-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
-        >
-          İptal
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="flex-1 bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-4 rounded-xl font-bold text-lg hover:from-gray-700 hover:to-gray-800 transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-gray-500"
+          >
+            ❌ İptal
+          </button>
+        )}
+      </div>
+
+      {/* Oyun Kuralları */}
+      <div className="mt-6 bg-black bg-opacity-20 rounded-xl p-4">
+        <h3 className="text-yellow-300 font-bold mb-2 text-center">🎮 Blackjack Kuralları</h3>
+        <ul className="text-purple-200 text-sm space-y-1">
+          <li>• Kazanırsan bahisinin 2 katını alırsın (1:1)</li>
+          <li>• Blackjack yaparsan 2.5 katını alırsın (3:2)</li>
+          <li>• Kaybedersen bahisini kaybedersin</li>
+          <li>• Berabere kalırsan bahisini geri alırsın</li>
+        </ul>
       </div>
     </div>
   );
