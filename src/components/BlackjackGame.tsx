@@ -57,9 +57,28 @@ export default function BlackjackGame() {
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [gameResult, setGameResult] = useState<'win' | 'loss' | 'tie' | null>(null);
   const [resultMessage, setResultMessage] = useState('');
+  const [gameRoom, setGameRoom] = useState<any>(null);
   
   // Virtual currency hook'u
   const { userProfile, placeBet, processWin, processLoss, getGameRoom } = useVirtualCurrency();
+
+  // Kullanıcı profili yüklendiğinde playerName'i otomatik ayarla
+  useEffect(() => {
+    if (userProfile?.username && !playerName) {
+      setPlayerName(userProfile.username);
+    }
+  }, [userProfile, playerName]);
+
+  // Oyun odasını yükle
+  useEffect(() => {
+    const loadGameRoom = async () => {
+      if (roomId) {
+        const room = await getGameRoom(roomId, 'blackjack');
+        setGameRoom(room);
+      }
+    };
+    loadGameRoom();
+  }, [roomId, getGameRoom]);
 
   // Ref for turn notification sound
   const turnSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -74,6 +93,13 @@ export default function BlackjackGame() {
   const isBlackjackSoundPlayingRef = useRef(false);
 
   const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error } = useSocketGame(roomId, playerName, joined);
+
+  // Otomatik olarak oyuna katıl
+  useEffect(() => {
+    if (userProfile?.username && playerName && !joined && !isLoading) {
+      joinRoom();
+    }
+  }, [userProfile, playerName, joined, isLoading]);
 
   // Calculate turn status before any conditional logic
   const isMyTurn = gameState ? gameState.currentPlayer === socketId : false;
@@ -94,6 +120,17 @@ export default function BlackjackGame() {
   useEffect(() => {
     if (gameState?.gameState === 'waiting') {
       resetBetForNewGame();
+    }
+  }, [gameState?.gameState]);
+
+  // Oyun bittiğinde bahisleri sıfırla (biraz gecikme ile)
+  useEffect(() => {
+    if (gameState?.gameState === 'finished') {
+      // 3 saniye sonra bahisleri sıfırla ki oyuncular sonuçları görebilsin
+      const timer = setTimeout(() => {
+        resetBetForNewGame();
+      }, 3000);
+      return () => clearTimeout(timer);
     }
   }, [gameState?.gameState]);
 
@@ -193,6 +230,9 @@ export default function BlackjackGame() {
     setShowBetModal(false);
     setGameResult(null);
     setResultMessage('');
+
+    console.log(`Bahis yerleştirildi: ${amount} (Session ID: ${sessionId})`);
+
   };
 
   const handleGameResult = async (result: 'win' | 'loss' | 'tie', isBlackjack: boolean = false) => {
@@ -230,9 +270,16 @@ export default function BlackjackGame() {
     setResultMessage('');
   };
 
+  const handleNewRound = async () => {
+    // Bahisleri sıfırla
+    resetBetForNewGame();
+    
+    // Oyunu waiting durumuna getir (resetRoom kullanarak)
+    await resetRoom();
+  };
+
   const joinRoom = async () => {
-    const trimmedName = playerName.trim();
-    if (roomId && trimmedName && trimmedName.length >= 2 && trimmedName.length <= 15) {
+    if (roomId && playerName.trim()) {
       // Error varsa temizle
       if (error) {
         // Error state'ini temizlemek için playerName'i değiştirip geri getir
@@ -245,12 +292,6 @@ export default function BlackjackGame() {
       setPlayerId(id);
       await joinGame(id);
       setJoined(true);
-    } else if (!trimmedName) {
-      alert('Lütfen bir isim girin!');
-    } else if (trimmedName.length < 2) {
-      alert('İsim en az 2 karakter olmalıdır!');
-    } else if (trimmedName.length > 15) {
-      alert('İsim en fazla 15 karakter olabilir!');
     }
   };
 
@@ -335,6 +376,9 @@ export default function BlackjackGame() {
             <h1 className="text-5xl font-bold text-gray-900 mb-3 drop-shadow-lg">🎰 Blackjack</h1>
             <p className="text-gray-700 text-lg font-medium">Arkadaşlarınla oyna ve kazan!</p>
             <p className="text-gray-600 text-sm mt-2">Oda: <span className="font-bold text-green-700">{roomId}</span></p>
+            {userProfile && (
+              <p className="text-green-600 text-sm mt-2">👤 Hoş geldin, <span className="font-bold">{userProfile.username}</span>!</p>
+            )}
           </div>
           <div className="space-y-6">
             {error && (
@@ -345,25 +389,21 @@ export default function BlackjackGame() {
                 </div>
               </div>
             )}
-            <div>
-              <label className="block text-sm font-bold text-gray-800 mb-2">👤 İsminiz</label>
-              <input
-                type="text"
-                placeholder="Oyuncu adınızı girin (max 15 karakter)"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value.slice(0, 15))}
-                maxLength={15}
-                className="w-full p-4 border-3 border-gray-400 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 focus:outline-none transition-all duration-200 shadow-lg text-lg font-medium"
-              />
-              <p className="text-xs text-gray-500 mt-1">{playerName.length}/15 karakter</p>
-            </div>
-            <button
-              onClick={joinRoom}
-              disabled={isLoading || !playerName.trim() || playerName.trim().length < 2 || playerName.length > 15}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 border-2 border-green-500 disabled:border-gray-400"
-            >
-              {isLoading ? '🔄 Katılıyor...' : '🎲 Oyuna Katıl'}
-            </button>
+            {!userProfile ? (
+              <div className="bg-blue-100 border-2 border-blue-400 text-blue-800 px-4 py-3 rounded-lg font-medium text-center">
+                <div className="flex items-center justify-center">
+                  <span className="text-blue-600 text-xl mr-2">🔄</span>
+                  <span>Kullanıcı profili yükleniyor...</span>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-green-100 border-2 border-green-400 text-green-800 px-4 py-3 rounded-lg font-medium text-center">
+                <div className="flex items-center justify-center">
+                  <span className="text-green-600 text-xl mr-2">✅</span>
+                  <span>Otomatik olarak oyuna katılıyor...</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -494,6 +534,38 @@ export default function BlackjackGame() {
         {/* Dealer's hand */}
         <div className="bg-gradient-to-r from-red-900 to-red-800 p-6 rounded-xl mb-6 shadow-2xl border-4 border-yellow-400">
           <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KRUPİYER</h2>
+          
+          {/* Krupiye Kasa Bilgisi */}
+          <div className="bg-black bg-opacity-30 rounded-lg p-3 mb-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-6">
+              <div className="flex items-center space-x-2">
+                <span className="text-yellow-300 font-bold text-sm sm:text-base">🏠</span>
+                <span className="text-yellow-300 font-bold text-sm sm:text-base">Casino Krupiyeri</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-green-300 font-bold text-sm sm:text-base">💰 Ev Kasası:</span>
+                <span className="text-lg sm:text-xl font-bold text-green-400">
+                  {gameRoom?.house_chips ? gameRoom.house_chips.toLocaleString() : '---'}
+                </span>
+                <span className="text-green-400 text-lg sm:text-xl">💎</span>
+              </div>
+              {userProfile && (
+                <div className="flex items-center space-x-2">
+                  <span className="text-blue-300 font-bold text-sm sm:text-base">� Sen:</span>
+                  <span className="text-lg sm:text-xl font-bold text-blue-400">{userProfile.chips.toLocaleString()}</span>
+                  <span className="text-blue-400 text-lg sm:text-xl">💎</span>
+                </div>
+              )}
+              {currentBet > 0 && (
+                <div className="flex items-center space-x-2">
+                  <span className="text-purple-300 font-bold text-sm sm:text-base">🎯 Bahis:</span>
+                  <span className="text-lg sm:text-xl font-bold text-purple-400">{currentBet.toLocaleString()}</span>
+                  <span className="text-purple-400 text-lg sm:text-xl">💎</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
           <div className="flex justify-center flex-wrap relative">
             {gameState.dealer.hand.map((card: Card, index: number) => (
               <div
@@ -531,7 +603,7 @@ export default function BlackjackGame() {
               const isTie = gameState.results.ties.some((t: { id: string; name: string; reason: string }) => t.id === player.id);
 
               // Bahis sistemi entegrasyonu - sadece kendi oyuncumuz için
-              if (player.id === playerId && currentBet > 0 && !gameResult) {
+              if (player.id === socketId && currentBet > 0 && !gameResult) {
                 if (isWinner) {
                   const winnerInfo = gameState.results.winners.find((w: { id: string; name: string; reason: string }) => w.id === player.id);
                   const isBlackjack = winnerInfo?.reason === 'blackjack';
@@ -579,7 +651,7 @@ export default function BlackjackGame() {
                   ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 via-yellow-100 to-yellow-200 shadow-yellow-200'
                   : gameState.gameState === 'finished' as string && resultStyle
                     ? resultStyle
-                    : isMyTurn && player.id === playerId
+                    : isMyTurn && player.id === socketId
                       ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
                       : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
               }`}>
@@ -590,7 +662,7 @@ export default function BlackjackGame() {
                   {isMyTurn && player.id === socketId && <span className="text-yellow-600 ml-2">🎯</span>}
                   {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                 </h3>
-                {player.id === playerId && (
+                {player.id === socketId && (
                   <div className="text-center mb-3">
                     <button
                       onClick={() => {
@@ -651,23 +723,19 @@ export default function BlackjackGame() {
                     </div>
                   )}
                   {/* Bahis Bilgileri */}
-                  {player.id === playerId && (
+                  {player.id === socketId && (
                     <div className="mt-3 p-3 bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg border border-purple-300">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-purple-700 font-bold">💰 Bahis:</span>
-                          <span className="text-lg font-bold text-purple-900">{currentBet.toLocaleString()} 💎</span>
-                        </div>
-                        {userProfile && (
+                      {currentBet > 0 && (
+                        <div className="flex items-center justify-center mb-2">
                           <div className="flex items-center space-x-2">
-                            <span className="text-green-700 font-bold">Bakiye:</span>
-                            <span className="text-lg font-bold text-green-900">{userProfile.chips.toLocaleString()} 💎</span>
+                            <span className="text-purple-700 font-bold">💰 Aktif Bahis:</span>
+                            <span className="text-lg font-bold text-purple-900">{currentBet.toLocaleString()} 💎</span>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       
-                      {/* Bahis Butonu - Oyuna katıldıktan sonra ve bahis yapılmamışsa */}
-                      {joined && currentBet === 0 && userProfile && (
+                      {/* Bahis Butonu - Oyuna katıldıktan sonra ve bahis yapılmamışsa */}  
+                      {joined && currentBet === 0 && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') && (
                         <button
                           onClick={() => setShowBetModal(true)}
                           className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-black px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-600 hover:to-yellow-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-yellow-400"
@@ -683,6 +751,19 @@ export default function BlackjackGame() {
                           <div>Current Bet: {currentBet}</div>
                           <div>User Profile: {userProfile ? '✅' : '❌'}</div>
                           <div>Joined: {joined ? '✅' : '❌'}</div>
+                          <div>Player ID: {playerId}</div>
+                          <div>Socket ID: {socketId}</div>
+                          <div>Current Player ID: {player.id}</div>
+                          <div>IDs Match (player.id === socketId): {player.id === socketId ? '✅' : '❌'}</div>
+                          <div>Bahis Butonu Koşulları:</div>
+                          <div style={{paddingLeft: '10px'}}>
+                            - joined: {joined ? '✅' : '❌'}
+                            <br/>- currentBet === 0: {currentBet === 0 ? '✅' : '❌'}
+                            <br/>- userProfile: {userProfile ? '✅' : '❌'} 
+                            <br/>- gameState in ('waiting', 'finished'): {(gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') ? '✅' : '❌'}
+                            <br/>- player.id === socketId: {player.id === socketId ? '✅' : '❌'}
+                            <br/>- GÖRÜNÜR MÜ: {(joined && currentBet === 0 && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished')) ? '✅ EVET' : '❌ HAYIR'}
+                          </div>
                         </div>
                       )}
                       
@@ -744,8 +825,8 @@ export default function BlackjackGame() {
 
         {/* Name Change Modal */}
         {showNameChangeModal && (
-          <div className="fixed inset-0 flex items-center justify-center z-40 p-4 pointer-events-none">
-            <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 bg-opacity-95 backdrop-blur-sm rounded-2xl p-8 max-w-md w-full shadow-2xl border-4 border-purple-400 pointer-events-auto animate-modal-appear">
+          <div className="fixed inset-0 backdrop-blur-sm bg-black bg-opacity-20 flex items-center justify-center z-40 p-4">
+            <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 bg-opacity-95 backdrop-blur-sm rounded-2xl p-8 max-w-md w-full shadow-2xl border-4 border-purple-400 animate-modal-appear">
               <h3 className="text-2xl font-bold text-white mb-6 text-center drop-shadow-lg">✏️ İsim Değiştir</h3>
               <div className="space-y-4">
                 <div>
@@ -790,19 +871,13 @@ export default function BlackjackGame() {
         />
 
         {gameState.gameState === 'finished' as string && gameState.results && (
-          <>
-            {/* Backdrop */}
-            <div className="fixed inset-0 casino-pattern bg-gradient-to-br from-green-900 via-green-800 to-black bg-opacity-80 animate-backdrop-fade-in z-40"></div>
-
-            {/* Modal */}
-            <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-              <div className="bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-black p-6 rounded-3xl shadow-2xl border-4 border-yellow-300 max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-modal-slide-down">
-                {/* Header */}
-                <div className="text-center mb-8">
-                  <h2 className="text-6xl font-bold mb-4 drop-shadow-lg">🎉</h2>
-                  <h3 className="text-4xl font-bold mb-2">OYUN SONUCU</h3>
-                  <div className="w-24 h-1 bg-black mx-auto rounded-full"></div>
-                </div>
+          <div className="fixed inset-0 backdrop-blur-sm bg-opacity-30 flex items-center justify-center z-30 p-4">
+            <div className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-black rounded-3xl shadow-2xl border-4 border-yellow-300 animate-modal-slide-down">
+              {/* Header */}
+              <div className="text-center mb-6">
+                <h2 className="text-4xl font-bold mb-2 drop-shadow-lg">🎉 OYUN SONUCU</h2>
+                <div className="w-24 h-1 bg-black mx-auto rounded-full"></div>
+              </div>
 
                 {/* Dealer Result - Hero Section */}
                 <div className="mb-8 p-6 bg-gradient-to-r from-black via-gray-900 to-black rounded-2xl border-4 border-yellow-400 shadow-2xl">
@@ -958,12 +1033,12 @@ export default function BlackjackGame() {
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   {gameState.gameState === 'finished' as string && (
                     <button
-                      onClick={restartGame}
+                      onClick={handleNewRound}
                       disabled={isLoading}
                       className="bg-gradient-to-r from-green-600 to-green-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-green-500 flex items-center justify-center"
                     >
-                      <span className="text-2xl mr-3">🔄</span>
-                      {isLoading ? 'Yenileniyor...' : 'YENİDEN OYNA'}
+                      <span className="text-2xl mr-3">🎯</span>
+                      {isLoading ? 'Hazırlanıyor...' : 'YENİ TUR'}
                     </button>
                   )}
                   <Link
@@ -984,7 +1059,6 @@ export default function BlackjackGame() {
                 </div>
               </div>
             </div>
-          </>
         )}
       </div>
 
@@ -1006,7 +1080,7 @@ export default function BlackjackGame() {
 
       {/* Bahis Modal */}
       {showBetModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 backdrop-blur-sm bg-opacity-20 flex items-center justify-center z-50 p-4">
           <BetPlacement
             roomId={roomId}
             gameType="blackjack"
