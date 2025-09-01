@@ -16,6 +16,34 @@ interface Player {
   isBlackjack?: boolean;
 }
 
+interface BetDecision {
+  playerId: string;
+  amount: number;
+  hasDecided: boolean;
+  hasBet: boolean;
+  playerName: string;
+}
+
+interface BetUpdate {
+  bet: {
+    playerId: string;
+    amount: number;
+    hasBet: boolean;
+    hasDecided: boolean;
+    playerName: string;
+  };
+}
+
+interface BettingStatusUpdate {
+  playerBets: {
+    [playerId: string]: {
+      amount: number;
+      hasBet: boolean;
+      hasDecided: boolean;
+    };
+  };
+}
+
 interface GameState {
   roomId: string;
   players: Player[];
@@ -37,8 +65,8 @@ export const useSocketGame = (
   playerName: string, 
   joined: boolean = false, 
   onChatMessage?: (message: {id: string, name: string, message: string, timestamp: number}) => void,
-  onBetUpdate?: (data: any) => void,
-  onBettingStatusUpdate?: (data: any) => void,
+  onBetUpdate?: (data: BetUpdate) => void,
+  onBettingStatusUpdate?: (data: BettingStatusUpdate) => void,
   onBettingCleared?: () => void
 ) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -277,7 +305,7 @@ export const useSocketGame = (
   }, [isConnected, roomId, playerName]);
 
   // Betting decision gönder
-  const sendBetDecision = useCallback(async (bet: { playerId: string; amount: number; hasDecided: boolean; hasBet: boolean; playerName: string }) => {
+  const sendBetDecision = useCallback(async (bet: BetDecision) => {
     if (socketRef.current && isConnected && roomId) {
       console.log('🎰 Sending bet decision:', bet);
       socketRef.current.emit('bet-decision', {

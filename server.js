@@ -613,8 +613,8 @@ app.prepare().then(() => {
 
     // Betting decision events
     socket.on('bet-decision', (data) => {
-      const { roomId, decision, amount = 0 } = data;
-      console.log(`💰 Bet decision from ${socket.id} in room ${roomId}: ${decision}, amount: ${amount}`);
+      const { roomId, bet } = data;
+      console.log(`💰 Bet decision from ${socket.id} in room ${roomId}:`, bet);
       
       const game = gameRooms.get(roomId);
       if (game) {
@@ -623,29 +623,45 @@ app.prepare().then(() => {
           game.playerBets = new Map();
         }
         
-        game.playerBets.set(socket.id, { decision, amount });
+        game.playerBets.set(socket.id, { 
+          decision: bet.hasBet ? 'bet' : 'no-bet', 
+          amount: bet.amount,
+          hasDecided: bet.hasDecided,
+          hasBet: bet.hasBet,
+          playerName: bet.playerName
+        });
         
         // Broadcast the betting decision to all players in the room
         io.to(roomId).emit('bet-decision-update', {
-          playerId: socket.id,
-          decision: decision,
-          amount: amount
+          bet: {
+            playerId: socket.id,
+            decision: bet.hasBet ? 'bet' : 'no-bet',
+            amount: bet.amount,
+            hasDecided: bet.hasDecided,
+            hasBet: bet.hasBet,
+            playerName: bet.playerName
+          }
         });
         
         console.log(`📤 Bet decision broadcasted to room ${roomId}`);
       }
     });
 
-    socket.on('get-betting-status', (roomId) => {
+    socket.on('get-betting-status', (data) => {
+      const { roomId } = data;
       const game = gameRooms.get(roomId);
       if (game && game.playerBets) {
         // Send current betting status to the requesting player
-        const bettingStatus = {};
+        const playerBets = {};
         game.playerBets.forEach((betInfo, playerId) => {
-          bettingStatus[playerId] = betInfo;
+          playerBets[playerId] = {
+            amount: betInfo.amount || 0,
+            hasBet: betInfo.hasBet || false,
+            hasDecided: betInfo.hasDecided || false
+          };
         });
         
-        socket.emit('betting-status-update', bettingStatus);
+        socket.emit('betting-status-update', { playerBets });
         console.log(`📤 Betting status sent to ${socket.id} in room ${roomId}`);
       }
     });

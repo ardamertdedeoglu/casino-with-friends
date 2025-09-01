@@ -15,6 +15,26 @@ interface Card {
   value: string;
 }
 
+interface BetUpdate {
+  bet: {
+    playerId: string;
+    amount: number;
+    hasBet: boolean;
+    hasDecided: boolean;
+    playerName: string;
+  };
+}
+
+interface BettingStatusUpdate {
+  playerBets: {
+    [playerId: string]: {
+      amount: number;
+      hasBet: boolean;
+      hasDecided: boolean;
+    };
+  };
+}
+
 interface GameRoom {
   id: string;
   game_type: string;
@@ -73,7 +93,7 @@ export default function BlackjackGame() {
   const [playerBets, setPlayerBets] = useState<{[playerId: string]: {decision: 'bet' | 'no-bet' | null, amount: number}}>({});
 
   // Virtual currency hook'u
-  const { userProfile, placeBet, processWin, processLoss, getGameRoom } = useVirtualCurrency();
+  const { userProfile, processWin, processLoss, getGameRoom } = useVirtualCurrency();
 
   // Kullanıcı profili yüklendiğinde playerName'i otomatik ayarla
   useEffect(() => {
@@ -106,7 +126,7 @@ export default function BlackjackGame() {
   const isBlackjackSoundPlayingRef = useRef(false);
 
   // Betting callback functions
-  const handleBetUpdate = useCallback((data: any) => {
+  const handleBetUpdate = useCallback((data: BetUpdate) => {
     console.log('🎰 Received bet update:', data);
     if (data.bet) {
       setPlayerBets(prev => ({
@@ -119,11 +139,11 @@ export default function BlackjackGame() {
     }
   }, []);
 
-  const handleBettingStatusUpdate = useCallback((data: any) => {
+  const handleBettingStatusUpdate = useCallback((data: BettingStatusUpdate) => {
     console.log('📊 Received betting status update:', data);
     if (data.playerBets) {
       const formattedBets: {[playerId: string]: {decision: 'bet' | 'no-bet', amount: number}} = {};
-      Object.entries(data.playerBets).forEach(([playerId, bet]: [string, any]) => {
+      Object.entries(data.playerBets).forEach(([playerId, bet]) => {
         formattedBets[playerId] = {
           decision: bet.hasBet ? 'bet' : 'no-bet',
           amount: bet.amount || 0
