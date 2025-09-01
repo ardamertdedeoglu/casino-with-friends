@@ -2,15 +2,30 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useAuth } from '../lib/auth';
+import SignUpForm from '../components/SignUpForm';
+import SignInForm from '../components/SignInForm';
 import { useRouter } from 'next/navigation';
 
 export default function Home() {
   const [roomId, setRoomId] = useState('');
   const [showRoomInput, setShowRoomInput] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const router = useRouter();
+
+  const { user, loading, signOut } = useAuth();
 
   const handleBlackjackClick = (e: React.MouseEvent) => {
     e.preventDefault();
+
+    // Kullanıcı giriş yapmamışsa uyarı göster
+    if (!user) {
+      setAuthMode('signin');
+      setShowAuthModal(true);
+      return;
+    }
+
     if (!showRoomInput) {
       setShowRoomInput(true);
     }
@@ -27,11 +42,66 @@ export default function Home() {
     router.push(`/blackjack/${randomId}`);
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-yellow-400 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-white mb-2">🎰 Yükleniyor</h2>
+          <p className="text-yellow-200">Casino deneyimine hazırlanıyoruz...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 flex items-center justify-center p-4">
       <div className="max-w-6xl w-full">
+        {/* Auth Buttons - Top Right */}
+        <div className="flex justify-end mb-8">
+          {user ? (
+            <div className="flex items-center gap-3">
+              <span className="text-yellow-200 font-semibold">
+                Hoş geldiniz, {user.user_metadata?.username || user.email}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+              >
+                🚪 Çıkış
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setAuthMode('signin');
+                  setShowAuthModal(true);
+                }}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              >
+                🔑 Giriş Yap
+              </button>
+              <button
+                onClick={() => {
+                  setAuthMode('signup');
+                  setShowAuthModal(true);
+                }}
+                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              >
+                🎰 Kayıt Ol
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Header */}
         <div className="text-center mb-12">
+
           <h1 className="text-6xl font-bold text-yellow-400 mb-4 drop-shadow-2xl animate-pulse">
             🎰 CASINO WITH FRIENDS
           </h1>
@@ -86,14 +156,23 @@ export default function Home() {
         {/* Games Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
           {/* Blackjack */}
-          <div onClick={handleBlackjackClick} className="group cursor-pointer">
+          <div onClick={handleBlackjackClick} className="group cursor-pointer relative">
+            {!user && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 rounded-3xl flex items-center justify-center z-10">
+                <div className="text-center text-white">
+                  <div className="text-4xl mb-2">🔒</div>
+                  <p className="font-bold">Giriş Yapın</p>
+                  <p className="text-sm">Oynamak için hesap gerekli</p>
+                </div>
+              </div>
+            )}
             <div className="bg-gradient-to-br from-yellow-50 via-white to-yellow-100 p-8 rounded-3xl shadow-2xl border-4 border-yellow-400 hover:border-yellow-300 transform hover:-translate-y-4 transition-all duration-300 hover:shadow-3xl">
               <div className="text-center">
                 <div className="text-8xl mb-4 group-hover:animate-bounce">🃏</div>
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">BLACKJACK</h2>
                 <p className="text-gray-600 mb-4">21&apos;e ulaşmaya çalış!</p>
                 <div className="bg-green-600 text-white px-6 py-3 rounded-full font-bold text-lg hover:bg-green-700 transition-colors">
-                  OYNA
+                  {user ? 'OYNA' : '🔑 GİRİŞ YAP'}
                 </div>
               </div>
             </div>
@@ -170,6 +249,37 @@ export default function Home() {
           </p>
         </div>
       </div>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">
+                {authMode === 'signin' ? 'Giriş Yap' : 'Kayıt Ol'}
+              </h2>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {authMode === 'signin' ? (
+              <SignInForm
+                onSuccess={() => setShowAuthModal(false)}
+                onSwitchToSignUp={() => setAuthMode('signup')}
+              />
+            ) : (
+              <SignUpForm
+                onSuccess={() => setShowAuthModal(false)}
+                onSwitchToSignIn={() => setAuthMode('signin')}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

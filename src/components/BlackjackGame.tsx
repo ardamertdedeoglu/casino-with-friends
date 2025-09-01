@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useSocketGame } from '../lib/useSocketGame';
 import Scoreboard from './Scoreboard';
 import ChatComponent from './ChatComponent';
+import SoundVolumeControl from './SoundVolumeControl';
 
 interface Card {
   suit: string;
@@ -47,8 +48,6 @@ export default function BlackjackGame() {
   const [playerId, setPlayerId] = useState('');
   const [showNameChangeModal, setShowNameChangeModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  const [soundVolume, setSoundVolume] = useState(70); // Default volume 70%
-  const [isMuted, setIsMuted] = useState(false);
 
   // Ref for turn notification sound
   const turnSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -78,28 +77,6 @@ export default function BlackjackGame() {
       return () => clearTimeout(timer);
     }
   }, [gameState, isLoading]);
-
-  // Load sound volume from localStorage on component mount
-  useEffect(() => {
-    const savedVolume = localStorage.getItem('blackjack-sound-volume');
-    if (savedVolume !== null) {
-      const volume = parseInt(savedVolume, 10);
-      if (volume >= 1 && volume <= 100) {
-        setSoundVolume(volume);
-      }
-    }
-  }, []);
-
-  // Update audio volume when soundVolume or isMuted changes
-  useEffect(() => {
-    const effectiveVolume = isMuted ? 0 : soundVolume / 100;
-    if (turnSoundRef.current) {
-      turnSoundRef.current.volume = effectiveVolume;
-    }
-    if (blackjackSoundRef.current) {
-      blackjackSoundRef.current.volume = effectiveVolume;
-    }
-  }, [soundVolume, isMuted]);
 
   // Play turn notification sound when it's player's turn (but not during blackjack sound)
   useEffect(() => {
@@ -369,28 +346,6 @@ export default function BlackjackGame() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4 relative">
-      {/* Custom CSS for slider */}
-      <style jsx>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: #fbbf24;
-          cursor: pointer;
-          border: 2px solid #f59e0b;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        .slider::-moz-range-thumb {
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: #fbbf24;
-          cursor: pointer;
-          border: 2px solid #f59e0b;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-      `}</style>
       {/* Invite Button - Top Left Corner (only when waiting) */}
       {gameState?.gameState === 'waiting' && (
         <div className="absolute top-4 left-4 z-10">
@@ -430,41 +385,18 @@ export default function BlackjackGame() {
           className="shadow-2xl"
         />
 
-        {/* Sound Volume Slider */}
-        <div className="mt-4 bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-2xl border-2 border-gray-600">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className="text-yellow-400 text-lg hover:text-yellow-300 transition-colors duration-200 p-1"
-              title={isMuted ? "Sesi aç" : "Sesi kapat"}
-            >
-              {isMuted ? "🔇" : "🔊"}
-            </button>
-            <div className="flex-1">
-              <label className="block text-sm font-bold text-white mb-2">Ses Seviyesi</label>
-              <input
-                type="range"
-                min="1"
-                max="100"
-                step="1"
-                value={soundVolume}
-                onChange={(e) => setSoundVolume(parseInt(e.target.value, 10))}
-                disabled={isMuted}
-                className={`w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer slider focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-opacity duration-200 ${isMuted ? 'opacity-50' : 'opacity-100'}`}
-                style={{
-                  background: `linear-gradient(to right, #fbbf24 0%, #fbbf24 ${soundVolume}%, #374151 ${soundVolume}%, #374151 100%)`
-                }}
-              />
-              <div className="flex justify-between text-xs text-gray-400 mt-1">
-                <span>1%</span>
-                <span className={`font-bold ${isMuted ? 'text-gray-500' : 'text-yellow-400'}`}>
-                  {isMuted ? 'Sessiz' : `${soundVolume}%`}
-                </span>
-                <span>100%</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Sound Volume Control */}
+        <SoundVolumeControl
+          onVolumeChange={(volume) => {
+            if (turnSoundRef.current) {
+              turnSoundRef.current.volume = volume;
+            }
+            if (blackjackSoundRef.current) {
+              blackjackSoundRef.current.volume = volume;
+            }
+          }}
+          className="mt-4"
+        />
       </div>
 
       <div className="max-w-6xl mx-auto">
@@ -498,7 +430,7 @@ export default function BlackjackGame() {
 
         {/* Dealer's hand */}
         <div className="bg-gradient-to-r from-red-900 to-red-800 p-6 rounded-xl mb-6 shadow-2xl border-4 border-yellow-400">
-          <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KURPİYER</h2>
+          <h2 className="text-2xl font-bold text-yellow-400 mb-4 text-center">🏠 KRUPİYER</h2>
           <div className="flex justify-center flex-wrap relative">
             {gameState.dealer.hand.map((card: Card, index: number) => (
               <div
@@ -758,7 +690,7 @@ export default function BlackjackGame() {
                 <div className="mb-8 p-6 bg-gradient-to-r from-black via-gray-900 to-black rounded-2xl border-4 border-yellow-400 shadow-2xl">
                   <div className="text-center">
                     <h3 className="text-3xl font-bold mb-4 text-yellow-300 flex items-center justify-center">
-                      🏠 KURPİYER
+                      🏠 KRUPİYER
                       {gameState.dealer.isBlackjack && <span className="ml-3 text-yellow-400 text-2xl animate-pulse">♠♥</span>}
                     </h3>
                     <div className="text-7xl font-bold text-white mb-4 drop-shadow-lg">
