@@ -15,6 +15,14 @@ interface Card {
   value: string;
 }
 
+interface GameRoom {
+  id: string;
+  game_type: string;
+  house_chips: number;
+  status: string;
+}
+
+
 interface Player {
   id: string;
   name: string;
@@ -57,8 +65,8 @@ export default function BlackjackGame() {
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [gameResult, setGameResult] = useState<'win' | 'loss' | 'tie' | null>(null);
   const [resultMessage, setResultMessage] = useState('');
-  const [gameRoom, setGameRoom] = useState<any>(null);
-  
+  const [gameRoom, setGameRoom] = useState<GameRoom | null>(null);
+
   // Virtual currency hook'u
   const { userProfile, placeBet, processWin, processLoss, getGameRoom } = useVirtualCurrency();
 
