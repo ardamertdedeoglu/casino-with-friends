@@ -15,6 +15,17 @@ interface Player {
   status: string;
   isBlackjack?: boolean;
   hasDoubledDown?: boolean;
+  // Split specific fields
+  hands?: Array<{
+    cards: Card[];
+    score: number;
+    bet: number;
+    status: string;
+    isBlackjack: boolean;
+    hasDoubledDown: boolean;
+  }>;
+  currentHandIndex?: number;
+  hasSplit?: boolean;
 }
 
 interface BetDecision {
@@ -225,6 +236,9 @@ export const useSocketGame = (
     } else if (action === 'double-down') {
       console.log('🎰 Emitting double-down event to room:', roomId);
       socketRef.current.emit('double-down', roomId);
+    } else if (action === 'split') {
+      console.log('🃏 Emitting split event to room:', roomId);
+      socketRef.current.emit('split', roomId);
     }
   }, [roomId, isConnected]);
 

@@ -83,12 +83,16 @@ class BlackjackGame {
     this.players.set(playerId, {
       id: playerId,
       name,
-      hand: [],
-      score: 0,
-      bet: 0,
-      status: 'playing',
-      isBlackjack: false,
-      hasDoubledDown: false,
+      hands: [{ // Split için hands array'i kullanıyoruz
+        cards: [],
+        score: 0,
+        status: 'playing',
+        isBlackjack: false,
+        hasDoubledDown: false,
+        bet: 0
+      }],
+      currentHandIndex: 0, // Hangi el oynuyor
+      hasSplit: false,
       winnings: 0 // Track total winnings across games
     });
   }
@@ -104,22 +108,23 @@ class BlackjackGame {
       for (const [playerId, betInfo] of this.playerBets) {
         const player = this.players.get(playerId);
         if (player && betInfo.hasBet) {
-          player.bet = betInfo.amount;
-          console.log(`💰 Set bet for player ${playerId} (${player.name}): ${player.bet}`);
+          player.hands[0].bet = betInfo.amount;
+          console.log(`💰 Set bet for player ${playerId} (${player.name}): ${player.hands[0].bet}`);
         }
       }
     }
 
     for (const [playerId, player] of this.players) {
-      player.status = 'playing';
-      player.hand = [this.dealCard(), this.dealCard()];
-      const scoreResult = this.calculateScore(player.hand);
-      player.score = scoreResult.score;
-      player.isBlackjack = scoreResult.isBlackjack;
+      const currentHand = player.hands[0];
+      currentHand.status = 'playing';
+      currentHand.cards = [this.dealCard(), this.dealCard()];
+      const scoreResult = this.calculateScore(currentHand.cards);
+      currentHand.score = scoreResult.score;
+      currentHand.isBlackjack = scoreResult.isBlackjack;
 
       // If player has blackjack, they automatically stand
-      if (player.isBlackjack) {
-        player.status = 'stood';
+      if (currentHand.isBlackjack) {
+        currentHand.status = 'stood';
         console.log(`♠️ Player ${playerId} (${player.name}) got blackjack and auto-stood`);
       }
     }
@@ -132,16 +137,23 @@ class BlackjackGame {
 
     this.currentPlayer = Array.from(this.players.keys())[0];
 
-    // Find the first player who is still playing (not blackjack)
-    const activePlayers = Array.from(this.players.values()).filter(p => p.status === 'playing');
-    if (activePlayers.length > 0) {
-      // Set currentPlayer to the first active player
-      const firstActivePlayerId = Array.from(this.players.entries()).find(([id, player]) => player.status === 'playing')?.[0];
-      if (firstActivePlayerId) {
-        this.currentPlayer = firstActivePlayerId;
-        console.log(`🎯 Game starting with active player: ${this.players.get(this.currentPlayer).name}`);
+    // Find the first player who is still playing (not blackjack) - use hands structure
+    let foundActivePlayer = false;
+    for (const [playerId, player] of this.players) {
+      for (let handIndex = 0; handIndex < player.hands.length; handIndex++) {
+        const hand = player.hands[handIndex];
+        if (hand.status === 'playing') {
+          this.currentPlayer = playerId;
+          player.currentHandIndex = handIndex;
+          console.log(`🎯 Game starting with active player: ${player.name}, hand: ${handIndex}`);
+          foundActivePlayer = true;
+          break;
+        }
       }
-    } else {
+      if (foundActivePlayer) break;
+    }
+    
+    if (!foundActivePlayer) {
       // All players got blackjack, dealer turn starts immediately
       console.log(`🎯 All players got blackjack, dealer turn starts immediately`);
       this.dealerTurn();
@@ -150,25 +162,27 @@ class BlackjackGame {
 
   hit(playerId) {
     const player = this.players.get(playerId);
-    if (player && player.status === 'playing' && !player.isBlackjack) {
-      player.hand.push(this.dealCard());
-      const scoreResult = this.calculateScore(player.hand);
-      player.score = scoreResult.score;
-      player.isBlackjack = scoreResult.isBlackjack;
+    if (player) {
+      const currentHand = player.hands[player.currentHandIndex];
+      if (currentHand && currentHand.status === 'playing' && !currentHand.isBlackjack) {
+        currentHand.cards.push(this.dealCard());
+        const scoreResult = this.calculateScore(currentHand.cards);
+        currentHand.score = scoreResult.score;
+        currentHand.isBlackjack = scoreResult.isBlackjack;
 
-      if (player.score > 21) {
-        player.status = 'busted';
-        console.log(`💥 Player ${playerId} busted with score: ${player.score}`);
-        this.nextPlayer(); // Sadece busted olduğunda sıradaki oyuncuya geç
-      } else if (player.isBlackjack) {
-        // Oyuncu kart çekerek blackjack yaptı
-        player.status = 'stood';
-        console.log(`♠️ Player ${playerId} (${player.name}) got blackjack by hitting!`);
-        this.nextPlayer(); // Blackjack yapıldığında da sıradaki oyuncuya geç
-      } else {
-        console.log(`🎯 Player ${playerId} hit, new score: ${player.score}`);
-        // Busted veya blackjack olmadıysa, aynı oyuncunun sırası devam eder
-        // nextPlayer() çağrılMAZ!
+        if (currentHand.score > 21) {
+          currentHand.status = 'busted';
+          console.log(`💥 Player ${playerId} hand ${player.currentHandIndex} busted with score: ${currentHand.score}`);
+          this.nextPlayerHand(); // Sıradaki ele geç
+        } else if (currentHand.isBlackjack) {
+          // Oyuncu kart çekerek blackjack yaptı
+          currentHand.status = 'stood';
+          console.log(`♠️ Player ${playerId} (${player.name}) got blackjack by hitting on hand ${player.currentHandIndex}!`);
+          this.nextPlayerHand(); // Blackjack yapıldığında da sıradaki ele geç
+        } else {
+          console.log(`🎯 Player ${playerId} hit hand ${player.currentHandIndex}, new score: ${currentHand.score}`);
+          // Busted veya blackjack olmadıysa, aynı elin sırası devam eder
+        }
       }
     }
   }
@@ -176,40 +190,154 @@ class BlackjackGame {
   stand(playerId) {
     const player = this.players.get(playerId);
     if (player) {
-      player.status = 'stood';
-      console.log(`🛑 Player ${playerId} (${player.name}) stood with score: ${player.score}`);
-      this.nextPlayer();
+      const currentHand = player.hands[player.currentHandIndex];
+      if (currentHand) {
+        currentHand.status = 'stood';
+        console.log(`🛑 Player ${playerId} (${player.name}) stood on hand ${player.currentHandIndex} with score: ${currentHand.score}`);
+        this.nextPlayerHand();
+      }
     }
+  }
+
+  split(playerId) {
+    const player = this.players.get(playerId);
+    if (player && !player.hasSplit && player.hands.length === 1) {
+      const currentHand = player.hands[0];
+      
+      // Split için gerekli koşulları kontrol et
+      if (currentHand.cards.length === 2) {
+        const card1Value = this.getCardValue(currentHand.cards[0]);
+        const card2Value = this.getCardValue(currentHand.cards[1]);
+        
+        // Kartların değeri aynı olmalı (10, J, Q, K hepsi 10 değerinde)
+        if (card1Value === card2Value) {
+          player.hasSplit = true;
+          
+          // İkinci eli oluştur
+          const secondHand = {
+            cards: [currentHand.cards[1]], // İkinci kartı al
+            score: 0,
+            status: 'playing',
+            isBlackjack: false,
+            hasDoubledDown: false,
+            bet: currentHand.bet // Aynı bahis miktarı
+          };
+          
+          // İlk eli güncelle
+          currentHand.cards = [currentHand.cards[0]]; // İlk kartı bırak
+          
+          // Her iki ele de yeni kart dağıt
+          currentHand.cards.push(this.dealCard());
+          secondHand.cards.push(this.dealCard());
+          
+          // Skorları hesapla
+          const firstScoreResult = this.calculateScore(currentHand.cards);
+          currentHand.score = firstScoreResult.score;
+          currentHand.isBlackjack = firstScoreResult.isBlackjack;
+          
+          const secondScoreResult = this.calculateScore(secondHand.cards);
+          secondHand.score = secondScoreResult.score;
+          secondHand.isBlackjack = secondScoreResult.isBlackjack;
+          
+          // İkinci eli ekle
+          player.hands.push(secondHand);
+          
+          // Eğer As split'i ise, sadece bir kart alabilir ve otomatik stand
+          if (currentHand.cards[0].value === 'A') {
+            currentHand.status = 'stood';
+            secondHand.status = 'stood';
+            console.log(`🃏 Player ${playerId} (${player.name}) split Aces - both hands auto-stood`);
+            this.nextPlayerHand();
+          } else {
+            // Normal split - blackjack kontrolü yap
+            if (currentHand.isBlackjack) {
+              currentHand.status = 'stood';
+              console.log(`♠️ Player ${playerId} (${player.name}) got blackjack on first hand after split!`);
+              // İkinci el aktif hale getir
+              player.currentHandIndex = 1;
+              console.log(`🔄 Switching to second hand automatically`);
+              
+              // İkinci el de blackjack ise onu da stood yap
+              if (secondHand.isBlackjack) {
+                secondHand.status = 'stood';
+                console.log(`♠️ Player ${playerId} (${player.name}) got blackjack on second hand too after split!`);
+                this.nextPlayerHand(); // Her iki el de blackjack, sıradaki oyuncuya geç
+              }
+            } else if (secondHand.isBlackjack) {
+              // İlk el normal, ikinci el blackjack
+              secondHand.status = 'stood';
+              console.log(`♠️ Player ${playerId} (${player.name}) got blackjack on second hand after split!`);
+              // İlk el hala aktif, devam et
+            }
+            
+            console.log(`🃏 Player ${playerId} (${player.name}) split cards! Now has ${player.hands.length} hands`);
+          }
+          
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Kart değerini hesapla (split için)
+  getCardValue(card) {
+    if (card.value === 'A') return 1; // As için 1 (11 de olabilir ama split için value karşılaştırması)
+    if (['K', 'Q', 'J'].includes(card.value)) return 10;
+    return parseInt(card.value);
+  }
+
+  // Sıradaki el veya oyuncuya geç
+  nextPlayerHand() {
+    console.log('🔄 nextPlayerHand() called');
+    const currentPlayerObj = this.players.get(this.currentPlayer);
+    
+    if (currentPlayerObj) {
+      // Aynı oyuncunun başka aktif eli var mı kontrol et
+      for (let i = currentPlayerObj.currentHandIndex + 1; i < currentPlayerObj.hands.length; i++) {
+        if (currentPlayerObj.hands[i].status === 'playing') {
+          currentPlayerObj.currentHandIndex = i;
+          console.log(`🔄 Same player ${this.currentPlayer}, switching to hand ${i}`);
+          return; // Aynı oyuncunun başka eli var
+        }
+      }
+    }
+    
+    // Bu oyuncunun tüm elleri bitti, tamamen farklı bir algoritma ile sıradaki oyuncuya geç
+    this.nextPlayer();
   }
 
   doubleDown(playerId) {
     const player = this.players.get(playerId);
-    if (player && player.status === 'playing' && player.hand.length === 2 && !player.hasDoubledDown) {
-      // Bahsi ikiye katla
-      player.bet *= 2;
-      player.hasDoubledDown = true;
-      
-      console.log(`🎰 Player ${playerId} (${player.name}) doubled down! New bet: ${player.bet}`);
-      
-      // Bir kart dağıt
-      player.hand.push(this.deck.pop());
-      const scoreResult = this.calculateScore(player.hand);
-      player.score = scoreResult.score;
-      player.isBlackjack = scoreResult.isBlackjack;
-      
-      console.log(`📇 Player ${playerId} (${player.name}) drew a card. New score: ${player.score}`);
-      
-      // Eğer 21'i aştıysa bust, değilse otomatik stand
-      if (player.score > 21) {
-        player.status = 'bust';
-        console.log(`💥 Player ${playerId} (${player.name}) busted after double down!`);
-      } else {
-        player.status = 'stood';
-        console.log(`🛑 Player ${playerId} (${player.name}) automatically stood after double down.`);
+    if (player) {
+      const currentHand = player.hands[player.currentHandIndex];
+      if (currentHand && currentHand.status === 'playing' && currentHand.cards.length === 2 && !currentHand.hasDoubledDown) {
+        // Bahsi ikiye katla
+        currentHand.bet *= 2;
+        currentHand.hasDoubledDown = true;
+        
+        console.log(`🎰 Player ${playerId} (${player.name}) doubled down on hand ${player.currentHandIndex}! New bet: ${currentHand.bet}`);
+        
+        // Bir kart dağıt
+        currentHand.cards.push(this.deck.pop());
+        const scoreResult = this.calculateScore(currentHand.cards);
+        currentHand.score = scoreResult.score;
+        currentHand.isBlackjack = scoreResult.isBlackjack;
+        
+        console.log(`📇 Player ${playerId} (${player.name}) drew a card for hand ${player.currentHandIndex}. New score: ${currentHand.score}`);
+        
+        // Eğer 21'i aştıysa bust, değilse otomatik stand
+        if (currentHand.score > 21) {
+          currentHand.status = 'busted';
+          console.log(`💥 Player ${playerId} (${player.name}) busted after double down on hand ${player.currentHandIndex}!`);
+        } else {
+          currentHand.status = 'stood';
+          console.log(`🛑 Player ${playerId} (${player.name}) automatically stood after double down on hand ${player.currentHandIndex}.`);
+        }
+        
+        this.nextPlayerHand();
+        return true;
       }
-      
-      this.nextPlayer();
-      return true;
     }
     return false;
   }
@@ -217,36 +345,33 @@ class BlackjackGame {
   nextPlayer() {
     console.log('🔄 nextPlayer() called');
     const allPlayerIds = Array.from(this.players.keys());
-    const activePlayerIds = allPlayerIds.filter(id => this.players.get(id).status === 'playing');
-
-    console.log('👥 All players:', Array.from(this.players.values()).map(p => ({ id: p.id, name: p.name, status: p.status, score: p.score })));
-    console.log('🎯 Current player:', this.currentPlayer);
-    console.log('🎮 Active players (playing status):', activePlayerIds);
-
-    let allFinished = true;
-    for (const player of this.players.values()) {
-      if (player.status === 'playing') {
-        allFinished = false;
-        console.log('⏳ Player still playing:', player.id, player.name);
-        break;
+    
+    // Hala oynayacak oyuncu var mı kontrol et (hands yapısını kullan)
+    const hasActivePlayer = () => {
+      for (const [playerId, player] of this.players) {
+        for (let handIndex = 0; handIndex < player.hands.length; handIndex++) {
+          const hand = player.hands[handIndex];
+          if (hand.status === 'playing') {
+            console.log(`⏳ Player ${playerId} hand ${handIndex} still playing`);
+            return { playerId, handIndex };
+          }
+        }
       }
-    }
+      return null;
+    };
 
-    if (allFinished) {
+    const activeHand = hasActivePlayer();
+    
+    if (!activeHand) {
       console.log('✅ All players finished, starting dealer turn...');
       this.dealerTurn();
     } else {
-      // Sadece aktif (playing) oyuncular arasında geçiş yap
-      const currentActiveIndex = activePlayerIds.indexOf(this.currentPlayer);
-      if (currentActiveIndex === -1) {
-        // Current player artık aktif değil, ilk aktif oyuncuya geç
-        this.currentPlayer = activePlayerIds[0];
-        console.log('🔄 Current player not active, switching to first active player:', this.currentPlayer);
-      } else {
-        // Bir sonraki aktif oyuncuya geç
-        const nextActiveIndex = (currentActiveIndex + 1) % activePlayerIds.length;
-        this.currentPlayer = activePlayerIds[nextActiveIndex];
-        console.log('➡️ Next active player:', this.currentPlayer, 'Index:', nextActiveIndex);
+      // Sıradaki aktif eli bul
+      this.currentPlayer = activeHand.playerId;
+      const player = this.players.get(activeHand.playerId);
+      if (player) {
+        player.currentHandIndex = activeHand.handIndex;
+        console.log(`➡️ Next active player: ${activeHand.playerId}, hand: ${activeHand.handIndex}`);
       }
     }
   }
@@ -459,9 +584,29 @@ class BlackjackGame {
   }
 
   getGameState() {
+    // Compatibility layer - convert hands back to old format for frontend
+    const compatiblePlayers = Array.from(this.players.values()).map(player => {
+      const currentHand = player.hands[player.currentHandIndex] || player.hands[0];
+      return {
+        id: player.id,
+        name: player.name,
+        hand: currentHand.cards,
+        score: currentHand.score,
+        bet: currentHand.bet,
+        status: currentHand.status,
+        isBlackjack: currentHand.isBlackjack,
+        hasDoubledDown: currentHand.hasDoubledDown,
+        winnings: player.winnings,
+        // Split specific data
+        hands: player.hands,
+        currentHandIndex: player.currentHandIndex,
+        hasSplit: player.hasSplit
+      };
+    });
+
     return {
       roomId: this.roomId,
-      players: Array.from(this.players.values()),
+      players: compatiblePlayers,
       dealer: {
         ...this.dealer,
         visibleScore: this.getDealerVisibleScore()
@@ -599,6 +744,23 @@ app.prepare().then(() => {
         }
       } else {
         console.log(`❌ Double down failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
+      }
+    });
+
+    socket.on('split', (roomId) => {
+      console.log(`🃏 Split event received from ${socket.id} in room ${roomId}`);
+      const game = gameRooms.get(roomId);
+      if (game && game.currentPlayer === socket.id) {
+        const success = game.split(socket.id);
+        if (success) {
+          console.log(`✅ Split processed for player ${socket.id}`);
+          io.to(roomId).emit('game-update', game.getGameState());
+          console.log(`📤 Split processed in room ${roomId}, player now has multiple hands`);
+        } else {
+          console.log(`❌ Split failed - conditions not met for player ${socket.id}`);
+        }
+      } else {
+        console.log(`❌ Split failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
       }
     });
 

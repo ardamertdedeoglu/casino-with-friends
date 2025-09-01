@@ -53,6 +53,17 @@ interface Player {
   isBlackjack?: boolean;
   winnings?: number;
   hasDoubledDown?: boolean;
+  // Split specific fields
+  hands?: Array<{
+    cards: Card[];
+    score: number;
+    bet: number;
+    status: string;
+    isBlackjack: boolean;
+    hasDoubledDown: boolean;
+  }>;
+  currentHandIndex?: number;
+  hasSplit?: boolean;
 }
 
 interface ScoreboardEntry {
@@ -478,6 +489,33 @@ export default function BlackjackGame() {
     }
   };
 
+  const split = async () => {
+    if (roomId && socketId) {
+      console.log('🃏 Split button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
+      console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
+      await makeMove('split', socketId);
+    } else {
+      console.log('❌ Split failed - roomId:', roomId, 'socketId:', socketId);
+    }
+  };
+
+  // Split yapılabilir mi kontrol et
+  const canSplit = (player: any) => {
+    if (!player.hand || player.hand.length !== 2 || player.hasSplit) return false;
+    
+    const card1Value = getCardValue(player.hand[0]);
+    const card2Value = getCardValue(player.hand[1]);
+    
+    return card1Value === card2Value;
+  };
+
+  // Kart değerini hesapla (split için)
+  const getCardValue = (card: Card) => {
+    if (card.value === 'A') return 1;
+    if (['K', 'Q', 'J'].includes(card.value)) return 10;
+    return parseInt(card.value);
+  };
+
   const renderCard = (card: Card) => {
     const suitSymbols = {
       hearts: '♥',
@@ -859,33 +897,52 @@ export default function BlackjackGame() {
                   ))}
                 </div>
                 <div className="text-center space-y-1">
-                  {/* Hit/Stand/Double Down buttons for current player */}
+                  {/* Hit/Stand/Double Down/Split buttons for current player */}
                   {isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
-                    <div className="flex items-center justify-center space-x-2 mb-2">
-                      <button
-                        onClick={hit}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-2 rounded-lg font-bold text-xs hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-blue-500 flex items-center space-x-1"
-                      >
-                        <span className="text-sm">🃏</span>
-                        <span>HIT</span>
-                      </button>
-                      <button
-                        onClick={stand}
-                        className="bg-gradient-to-r from-red-600 to-red-700 text-white px-3 py-2 rounded-lg font-bold text-xs hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-red-500 flex items-center space-x-1"
-                      >
-                        <span className="text-sm">✋</span>
-                        <span>STAND</span>
-                      </button>
-                      {/* Double Down button - only show if player has exactly 2 cards */}
-                      {player.hand.length === 2 && (
+                    <div className="space-y-2 mb-2">
+                      {/* Temel butonlar - Hit & Stand */}
+                      <div className="flex items-center justify-center space-x-3">
                         <button
-                          onClick={doubleDown}
-                          className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-2 rounded-lg font-bold text-xs hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-purple-500 flex items-center space-x-1"
+                          onClick={hit}
+                          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-blue-500 flex items-center space-x-2"
                         >
-                          <span className="text-sm">🎰</span>
-                          <span>DOUBLE</span>
+                          <span className="text-lg">🃏</span>
+                          <span>HIT</span>
                         </button>
-                      )}
+                        <button
+                          onClick={stand}
+                          className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-red-500 flex items-center space-x-2"
+                        >
+                          <span className="text-lg">✋</span>
+                          <span>STAND</span>
+                        </button>
+                      </div>
+                      
+                      {/* Özel butonlar - Double Down & Split */}
+                      {(player.hand.length === 2 && !player.hasDoubledDown) || canSplit(player) ? (
+                        <div className="flex items-center justify-center space-x-3">
+                          {/* Double Down button - only show if player has exactly 2 cards */}
+                          {player.hand.length === 2 && !player.hasDoubledDown && (
+                            <button
+                              onClick={doubleDown}
+                              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-purple-500 flex items-center space-x-2"
+                            >
+                              <span className="text-lg">🎰</span>
+                              <span>DOUBLE</span>
+                            </button>
+                          )}
+                          {/* Split button - only show if player can split */}
+                          {canSplit(player) && (
+                            <button
+                              onClick={split}
+                              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-green-500 flex items-center space-x-2"
+                            >
+                              <span className="text-lg">🃏🃏</span>
+                              <span>SPLIT</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                   {/* Bahis Bilgileri - Herkes için görünür */}
