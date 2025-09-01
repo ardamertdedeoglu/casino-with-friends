@@ -35,7 +35,7 @@ export default function ChipDeposit({ onClose }: ChipDepositProps) {
       } else {
         setMessage('Chip yatırma işlemi başarısız oldu. Lütfen tekrar deneyin.');
       }
-    } catch (error) {
+    } catch {
       setMessage('Bir hata oluştu. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
@@ -125,10 +125,10 @@ export default function ChipDeposit({ onClose }: ChipDepositProps) {
       <div className="mt-6 bg-black bg-opacity-20 rounded-xl p-4">
         <h3 className="text-yellow-300 font-bold mb-2 text-center">ℹ️ Bilgi</h3>
         <ul className="text-green-200 text-sm space-y-1">
-          <li>• Chip'ler sadece oyun içinde kullanılabilir</li>
-          <li>• Kazandığınız chip'ler hesabınızda kalıcı olarak durur</li>
+          <li>• Chip&apos;ler sadece oyun içinde kullanılabilir</li>
+          <li>• Kazandığınız chip&apos;ler hesabınızda kalıcı olarak durur</li>
           <li>• Bahis yaparken mevcut bakiyenizi kontrol edin</li>
-          <li>• Blackjack'te kazanırsan bahisinin 2 katını alırsın!</li>
+          <li>• Blackjack&apos;te kazanırsan bahisinin 2 katını alırsın!</li>
         </ul>
       </div>
     </div>
