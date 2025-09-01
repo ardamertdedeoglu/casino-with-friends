@@ -604,6 +604,30 @@ app.prepare().then(() => {
         timestamp: Date.now()
       });
     });
+
+    // Player bet update event
+    socket.on('update-player-bet', (data) => {
+      const { roomId, playerId, betAmount } = data;
+      console.log(`💰 Player ${playerId} bet updated to ${betAmount} in room ${roomId}`);
+      
+      // Update player bet in game room
+      const gameRoom = gameRooms.get(roomId);
+      if (gameRoom) {
+        const player = gameRoom.players.get(playerId);
+        if (player) {
+          player.bet = betAmount;
+          
+          // Send bet update to all players in the room
+          io.to(roomId).emit('player-bet-updated', {
+            playerId,
+            betAmount
+          });
+          
+          // Send updated game state
+          io.to(roomId).emit('game-update', gameRoom.getGameState());
+        }
+      }
+    });
   });
 
   httpServer.listen(port, (err) => {

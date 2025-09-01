@@ -119,6 +119,21 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
       setIsConnected(true);
     });
 
+    socket.on('player-bet-updated', (data: { playerId: string; betAmount: number }) => {
+      console.log('💰 Player bet updated:', data);
+      setGameState(prevState => {
+        if (!prevState) return prevState;
+        return {
+          ...prevState,
+          players: prevState.players.map(player =>
+            player.id === data.playerId
+              ? { ...player, bet: data.betAmount }
+              : player
+          )
+        };
+      });
+    });
+
     socket.on('reconnect_error', (error) => {
       console.error('🚨 Socket.IO reconnection error:', error);
     });
@@ -248,6 +263,8 @@ export const useSocketGame = (roomId: string, playerName: string, joined: boolea
 
   return {
     gameState,
+    setGameState,
+    socket: socketRef.current,
     isConnected,
     isLoading,
     socketId,

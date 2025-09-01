@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { useAuth } from '../lib/auth';
 import SignUpForm from '../components/SignUpForm';
 import SignInForm from '../components/SignInForm';
+import ChipDeposit from '../components/ChipDeposit';
+import { useVirtualCurrency } from '../lib/virtualCurrency';
 import { useRouter } from 'next/navigation';
 
 export default function Home() {
@@ -12,9 +14,11 @@ export default function Home() {
   const [showRoomInput, setShowRoomInput] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [showChipDeposit, setShowChipDeposit] = useState(false);
   const router = useRouter();
 
   const { user, loading, signOut } = useAuth();
+  const { userChips, formatChips } = useVirtualCurrency();
 
   const handleBlackjackClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -64,10 +68,27 @@ export default function Home() {
         {/* Auth Buttons - Top Right */}
         <div className="flex justify-end mb-8">
           {user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
+              {/* Chip Info */}
+              <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-black px-4 py-2 rounded-full font-bold shadow-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💰</span>
+                  <span>{userChips ? formatChips(userChips.balance) : '0'}</span>
+                  <button
+                    onClick={() => setShowChipDeposit(true)}
+                    className="ml-2 bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* User Welcome */}
               <span className="text-yellow-200 font-semibold">
                 Hoş geldiniz, {user.user_metadata?.username || user.email}
               </span>
+
+              {/* Logout Button */}
               <button
                 onClick={handleSignOut}
                 className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 cursor-pointer"
@@ -278,6 +299,13 @@ export default function Home() {
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Chip Deposit Modal */}
+      {showChipDeposit && user && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <ChipDeposit onClose={() => setShowChipDeposit(false)} />
         </div>
       )}
     </div>
