@@ -12,6 +12,13 @@ interface BetPlacementProps {
   maxBet?: number;
 }
 
+interface GameRoom {
+  id: string;
+  game_type: string;
+  house_chips: number;
+  status: string;
+}
+
 export default function BetPlacement({ 
   roomId, 
   gameType, 
@@ -25,7 +32,7 @@ export default function BetPlacement({
   const [message, setMessage] = useState('');
   const { userProfile, placeBet, getGameRoom } = useVirtualCurrency();
 
-  const [gameRoom, setGameRoom] = useState<any>(null);
+  const [gameRoom, setGameRoom] = useState<GameRoom | null>(null);
 
   // Oyun odasını yükle
   useState(() => {
