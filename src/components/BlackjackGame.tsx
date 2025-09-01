@@ -744,28 +744,6 @@ export default function BlackjackGame() {
                         </button>
                       )}
                       
-                      {/* Debug Bilgileri */}
-                      {process.env.NODE_ENV === 'development' && (
-                        <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
-                          <div>Game State: {gameState?.gameState}</div>
-                          <div>Current Bet: {currentBet}</div>
-                          <div>User Profile: {userProfile ? '✅' : '❌'}</div>
-                          <div>Joined: {joined ? '✅' : '❌'}</div>
-                          <div>Player ID: {playerId}</div>
-                          <div>Socket ID: {socketId}</div>
-                          <div>Current Player ID: {player.id}</div>
-                          <div>IDs Match (player.id === socketId): {player.id === socketId ? '✅' : '❌'}</div>
-                          <div>Bahis Butonu Koşulları:</div>
-                          <div style={{paddingLeft: '10px'}}>
-                            - joined: {joined ? '✅' : '❌'}
-                            <br/>- currentBet === 0: {currentBet === 0 ? '✅' : '❌'}
-                            <br/>- userProfile: {userProfile ? '✅' : '❌'} 
-                            <br/>- gameState in ('waiting', 'finished'): {(gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') ? '✅' : '❌'}
-                            <br/>- player.id === socketId: {player.id === socketId ? '✅' : '❌'}
-                            <br/>- GÖRÜNÜR MÜ: {(joined && currentBet === 0 && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished')) ? '✅ EVET' : '❌ HAYIR'}
-                          </div>
-                        </div>
-                      )}
                       
                       {/* Bahis Sonucu Mesajı */}
                       {resultMessage && (
