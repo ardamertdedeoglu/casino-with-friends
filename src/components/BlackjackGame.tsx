@@ -700,7 +700,7 @@ export default function BlackjackGame() {
               </div>
               {userProfile && (
                 <div className="flex items-center space-x-2">
-                  <span className="text-blue-300 font-bold text-sm sm:text-base">� Sen:</span>
+                  <span className="text-blue-300 font-bold text-sm sm:text-base">🫵 Sen:</span>
                   <span className="text-lg sm:text-xl font-bold text-blue-400">{userProfile.chips.toLocaleString()}</span>
                   <span className="text-blue-400 text-lg sm:text-xl">💎</span>
                 </div>
