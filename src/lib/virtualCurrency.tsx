@@ -147,7 +147,7 @@ export function VirtualCurrencyProvider({ children }: { children: React.ReactNod
   const getGameRoom = async (roomId: string, gameType: string): Promise<GameRoom | null> => {
     try {
       // Önce oda var mı kontrol et
-      let { data: room, error } = await supabase
+      const { data: room, error } = await supabase
         .from('game_rooms')
         .select('*')
         .eq('id', roomId)
