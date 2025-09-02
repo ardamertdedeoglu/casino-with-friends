@@ -523,6 +523,12 @@ class BlackjackGame {
     let dealerWins = 0;
 
     for (const [playerId, player] of this.players) {
+      // Her el için ayrı ayrı sonuç hesapla
+      let playerWon = false;
+      let playerLost = false;
+      let playerTied = false;
+      let totalWinnings = 0;
+      
       // Insurance kontrolü ve ödemesi
       if (player.hasInsurance) {
         if (this.dealer.isBlackjack) {
@@ -535,12 +541,6 @@ class BlackjackGame {
           console.log(`🛡️ ${player.name} insurance lost: ${player.insuranceBet}`);
         }
       }
-
-      // Her el için ayrı ayrı sonuç hesapla
-      let playerWon = false;
-      let playerLost = false;
-      let playerTied = false;
-      let totalWinnings = 0;
       
       for (let handIndex = 0; handIndex < player.hands.length; handIndex++) {
         const hand = player.hands[handIndex];
@@ -709,7 +709,8 @@ class BlackjackGame {
       },
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
-      results: this.results || null
+      results: this.results || null,
+      deckCount: this.deck.length // Kalan kart sayısı
     };
   }
 }

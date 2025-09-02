@@ -65,6 +65,7 @@ interface GameState {
   dealer: { hand: Card[]; score: number; hiddenCard: boolean; isBlackjack?: boolean; visibleScore: number };
   gameState: string;
   currentPlayer: string;
+  deckCount?: number; // Destede kalan kart sayısı
   results?: {
     dealerBusted: boolean;
     dealerBlackjack?: boolean;
