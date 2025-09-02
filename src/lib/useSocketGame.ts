@@ -26,6 +26,9 @@ interface Player {
   }>;
   currentHandIndex?: number;
   hasSplit?: boolean;
+  // Insurance specific fields
+  hasInsurance?: boolean;
+  insuranceBet?: number;
 }
 
 interface BetDecision {
@@ -218,7 +221,7 @@ export const useSocketGame = (
   }, []);
 
   // Hamle yap
-  const makeMove = useCallback(async (action: string, playerId?: string) => {
+  const makeMove = useCallback(async (action: string, playerId?: string, amount?: number) => {
     if (!socketRef.current || !isConnected) {
       console.error('🚨 Socket not connected');
       return;
@@ -239,6 +242,9 @@ export const useSocketGame = (
     } else if (action === 'split') {
       console.log('🃏 Emitting split event to room:', roomId);
       socketRef.current.emit('split', roomId);
+    } else if (action === 'insurance') {
+      console.log('🛡️ Emitting insurance event to room:', roomId, 'with amount:', amount);
+      socketRef.current.emit('insurance', { roomId, amount });
     }
   }, [roomId, isConnected]);
 

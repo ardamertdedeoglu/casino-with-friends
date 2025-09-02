@@ -93,7 +93,10 @@ class BlackjackGame {
       }],
       currentHandIndex: 0, // Hangi el oynuyor
       hasSplit: false,
-      winnings: 0 // Track total winnings across games
+      winnings: 0, // Track total winnings across games
+      // Insurance fields
+      hasInsurance: false,
+      insuranceBet: 0
     });
   }
 
@@ -281,6 +284,25 @@ class BlackjackGame {
     return false;
   }
 
+  // Insurance helper functions
+  canOfferInsurance() {
+    // Insurance sadece dealer'ın açık kartı As olduğunda ve hiçbir oyuncu henüz insurance almadığında sunulur
+    return this.dealer.hand && 
+           this.dealer.hand.length >= 1 && 
+           this.dealer.hand[0].value === 'A' &&
+           this.gameState === 'playing';
+  }
+
+  getMaxInsuranceAmount(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return 0;
+    
+    const currentHand = player.hands[player.currentHandIndex];
+    if (!currentHand || currentHand.bet === 0) return 0;
+    
+    return Math.floor(currentHand.bet / 2);
+  }
+
   // Kart değerini hesapla (split için)
   getCardValue(card) {
     if (card.value === 'A') return 1; // As için 1 (11 de olabilir ama split için value karşılaştırması)
@@ -306,6 +328,39 @@ class BlackjackGame {
     
     // Bu oyuncunun tüm elleri bitti, tamamen farklı bir algoritma ile sıradaki oyuncuya geç
     this.nextPlayer();
+  }
+
+  insurance(playerId, amount) {
+    const player = this.players.get(playerId);
+    if (!player || player.hasInsurance) {
+      console.log(`❌ Insurance failed - player not found or already has insurance`);
+      return false;
+    }
+
+    // Insurance sadece dealer'ın açık kartı As olduğunda yapılabilir
+    if (!this.dealer.hand || this.dealer.hand.length < 1 || this.dealer.hand[0].value !== 'A') {
+      console.log(`❌ Insurance failed - dealer's up card is not an Ace`);
+      return false;
+    }
+
+    const currentHand = player.hands[player.currentHandIndex];
+    if (!currentHand || currentHand.bet === 0) {
+      console.log(`❌ Insurance failed - no main bet found`);
+      return false;
+    }
+
+    // Insurance bet maximum main bet'in yarısı olabilir
+    const maxInsurance = Math.floor(currentHand.bet / 2);
+    if (amount > maxInsurance) {
+      console.log(`❌ Insurance failed - amount ${amount} exceeds max ${maxInsurance}`);
+      return false;
+    }
+
+    player.hasInsurance = true;
+    player.insuranceBet = amount;
+    
+    console.log(`🛡️ Player ${playerId} (${player.name}) placed insurance bet: ${amount}`);
+    return true;
   }
 
   doubleDown(playerId) {
@@ -468,6 +523,19 @@ class BlackjackGame {
     let dealerWins = 0;
 
     for (const [playerId, player] of this.players) {
+      // Insurance kontrolü ve ödemesi
+      if (player.hasInsurance) {
+        if (this.dealer.isBlackjack) {
+          // Insurance kazandı - 2:1 ödeme
+          const insuranceWin = player.insuranceBet * 2;
+          totalWinnings += insuranceWin;
+          console.log(`🛡️ ${player.name} insurance won: ${insuranceWin} (bet: ${player.insuranceBet})`);
+        } else {
+          // Insurance kaybetti
+          console.log(`🛡️ ${player.name} insurance lost: ${player.insuranceBet}`);
+        }
+      }
+
       // Her el için ayrı ayrı sonuç hesapla
       let playerWon = false;
       let playerLost = false;
@@ -624,7 +692,10 @@ class BlackjackGame {
         // Split specific data
         hands: player.hands,
         currentHandIndex: player.currentHandIndex,
-        hasSplit: player.hasSplit
+        hasSplit: player.hasSplit,
+        // Insurance specific data
+        hasInsurance: player.hasInsurance,
+        insuranceBet: player.insuranceBet
       };
     });
 
@@ -633,7 +704,8 @@ class BlackjackGame {
       players: compatiblePlayers,
       dealer: {
         ...this.dealer,
-        visibleScore: this.getDealerVisibleScore()
+        visibleScore: this.getDealerVisibleScore(),
+        canOfferInsurance: this.canOfferInsurance()
       },
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
@@ -768,6 +840,24 @@ app.prepare().then(() => {
         }
       } else {
         console.log(`❌ Double down failed - currentPlayer: ${game?.currentPlayer}, socketId: ${socket.id}`);
+      }
+    });
+
+    socket.on('insurance', (data) => {
+      const { roomId, amount } = data;
+      console.log(`🛡️ Insurance event received from ${socket.id} in room ${roomId} with amount ${amount}`);
+      const game = gameRooms.get(roomId);
+      if (game && game.canOfferInsurance()) {
+        const success = game.insurance(socket.id, amount);
+        if (success) {
+          console.log(`✅ Insurance processed for player ${socket.id}`);
+          io.to(roomId).emit('game-update', game.getGameState());
+          console.log(`📤 Insurance processed in room ${roomId}`);
+        } else {
+          console.log(`❌ Insurance failed - conditions not met for player ${socket.id}`);
+        }
+      } else {
+        console.log(`❌ Insurance failed - game not found or insurance not available`);
       }
     });
 

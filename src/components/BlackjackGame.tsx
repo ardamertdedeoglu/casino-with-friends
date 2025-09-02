@@ -64,6 +64,9 @@ interface Player {
   }>;
   currentHandIndex?: number;
   hasSplit?: boolean;
+  // Insurance specific fields
+  hasInsurance?: boolean;
+  insuranceBet?: number;
 }
 
 interface ScoreboardEntry {
@@ -499,6 +502,30 @@ export default function BlackjackGame() {
     }
   };
 
+  const insurance = async (amount: number) => {
+    if (roomId && socketId) {
+      console.log('🛡️ Insurance button clicked, socketId:', socketId, 'amount:', amount);
+      await makeMove('insurance', socketId, amount);
+    } else {
+      console.log('❌ Insurance failed - roomId:', roomId, 'socketId:', socketId);
+    }
+  };
+
+  // Insurance yapılabilir mi kontrol et
+  const canInsurance = (player: Player) => {
+    if (!gameState?.dealer || !gameState.dealer.hand || gameState.dealer.hand.length < 1) return false;
+    if (gameState.dealer.hand[0].value !== 'A') return false;
+    if (player.hasInsurance) return false;
+    if (!player.hand || player.hand.length !== 2) return false;
+    return true;
+  };
+
+  // Maximum insurance miktarını hesapla
+  const getMaxInsurance = (player: Player) => {
+    if (!player.bet) return 0;
+    return Math.floor(player.bet / 2);
+  };
+
   // Split yapılabilir mi kontrol et
   const canSplit = (player: Player) => {
     if (!player.hand || player.hand.length !== 2 || player.hasSplit) return false;
@@ -920,8 +947,8 @@ export default function BlackjackGame() {
                         </button>
                       </div>
                       
-                      {/* Özel butonlar - Double Down & Split */}
-                      {(player.hand.length === 2 && !player.hasDoubledDown) || canSplit(player) ? (
+                      {/* Özel butonlar - Double Down, Split & Insurance */}
+                      {(player.hand.length === 2 && !player.hasDoubledDown) || canSplit(player) || canInsurance(player) ? (
                         <div className="flex items-center justify-center space-x-3">
                           {/* Double Down button - only show if player has exactly 2 cards */}
                           {player.hand.length === 2 && !player.hasDoubledDown && (
@@ -941,6 +968,16 @@ export default function BlackjackGame() {
                             >
                               <span className="text-lg">🃏🃏</span>
                               <span>SPLIT</span>
+                            </button>
+                          )}
+                          {/* Insurance button - only show if dealer shows Ace and conditions are met */}
+                          {canInsurance(player) && (
+                            <button
+                              onClick={() => insurance(getMaxInsurance(player))}
+                              className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-700 hover:to-yellow-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-yellow-500 flex items-center space-x-2"
+                            >
+                              <span className="text-lg">🛡️</span>
+                              <span>INSURANCE</span>
                             </button>
                           )}
                         </div>
@@ -992,6 +1029,18 @@ export default function BlackjackGame() {
                         )}
                       </div>
                     </div>
+                    
+                    {/* Insurance Bilgisi */}
+                    {player.hasInsurance && (
+                      <div className="flex items-center justify-center mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-yellow-700 font-bold">🛡️ Insurance:</span>
+                          <span className="text-lg font-bold text-yellow-700">
+                            {player.insuranceBet?.toLocaleString()} 💎
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Bahis Butonları - Sadece kendi için */}
                     {player.id === socketId && joined && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') && !hasBet && (
