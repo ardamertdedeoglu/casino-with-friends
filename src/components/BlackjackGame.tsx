@@ -79,9 +79,9 @@ interface ScoreboardEntry {
 interface GameResults {
   dealerBusted: boolean;
   dealerBlackjack?: boolean;
-  winners: Array<{ id: string; name: string; reason: string }>;
-  losers: Array<{ id: string; name: string; reason: string }>;
-  ties: Array<{ id: string; name: string; reason: string }>;
+  winners: Array<{ id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }>;
+  losers: Array<{ id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }>;
+  ties: Array<{ id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }>;
   scoreboard?: Array<ScoreboardEntry>;
 }
 
@@ -590,10 +590,9 @@ export default function BlackjackGame() {
   const canSplit = (player: Player) => {
     if (!player.hand || player.hand.length !== 2 || player.hasSplit) return false;
     
-    // Kartların değeri tam olarak aynı olmalı (Q ile Q, J ile J, 10 ile 10 vs.)
-    // Q ile 10, K ile 10 gibi kombinasyonlar split edilemez
-    const card1Value = player.hand[0].value;
-    const card2Value = player.hand[1].value;
+    // Kartların sayısal değerleri aynı olmalı (J=10, Q=10, K=10 olduğu için bunlar birbirleriyle split edilebilir)
+    const card1Value = getCardValue(player.hand[0]);
+    const card2Value = getCardValue(player.hand[1]);
     
     return card1Value === card2Value;
   };
@@ -924,14 +923,14 @@ export default function BlackjackGame() {
             let resultText = '';
 
             if (gameState.gameState === 'finished' as string && gameState.results) {
-              const isWinner = gameState.results.winners.some((w: { id: string; name: string; reason: string }) => w.id === player.id);
-              const isLoser = gameState.results.losers.some((l: { id: string; name: string; reason: string }) => l.id === player.id);
-              const isTie = gameState.results.ties.some((t: { id: string; name: string; reason: string }) => t.id === player.id);
+              const isWinner = gameState.results.winners.some((w: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => w.id === player.id);
+              const isLoser = gameState.results.losers.some((l: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => l.id === player.id);
+              const isTie = gameState.results.ties.some((t: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => t.id === player.id);
 
               // Bahis sistemi entegrasyonu - sadece kendi oyuncumuz için
               if (player.id === socketId && currentBet > 0 && !gameResult) {
                 if (isWinner) {
-                  const winnerInfo = gameState.results.winners.find((w: { id: string; name: string; reason: string }) => w.id === player.id);
+                  const winnerInfo = gameState.results.winners.find((w: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => w.id === player.id);
                   const isBlackjack = winnerInfo?.reason === 'blackjack';
                   handleGameResult('win', isBlackjack);
                 } else if (isLoser) {
@@ -944,7 +943,7 @@ export default function BlackjackGame() {
               if (isWinner) {
                 resultStyle = 'border-green-500 bg-gradient-to-br from-green-100 to-green-200 ring-4 ring-green-300';
                 resultIcon = '🏆';
-                const winnerInfo = gameState.results.winners.find((w: { id: string; name: string; reason: string }) => w.id === player.id);
+                const winnerInfo = gameState.results.winners.find((w: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => w.id === player.id);
                 if (winnerInfo?.reason === 'blackjack') {
                   resultText = '🎉 BLACKJACK!';
                 } else {
@@ -953,7 +952,7 @@ export default function BlackjackGame() {
               } else if (isLoser) {
                 resultStyle = 'border-red-500 bg-gradient-to-br from-red-100 to-red-200 ring-4 ring-red-300';
                 resultIcon = '❌';
-                const loserInfo = gameState.results.losers.find((l: { id: string; name: string; reason: string }) => l.id === player.id);
+                const loserInfo = gameState.results.losers.find((l: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => l.id === player.id);
                 if (loserInfo?.reason === 'dealer_blackjack') {
                   resultText = 'Krupiyer Blackjack!';
                 } else {
@@ -962,7 +961,7 @@ export default function BlackjackGame() {
               } else if (isTie) {
                 resultStyle = 'border-blue-500 bg-gradient-to-br from-blue-100 to-blue-200 ring-4 ring-blue-300';
                 resultIcon = '🤝';
-                const tieInfo = gameState.results.ties.find((t: { id: string; name: string; reason: string }) => t.id === player.id);
+                const tieInfo = gameState.results.ties.find((t: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => t.id === player.id);
                 if (tieInfo?.reason === 'blackjack_push') {
                   resultText = 'Blackjack Berabere!';
                 } else {
@@ -990,7 +989,16 @@ export default function BlackjackGame() {
                     {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                   </h3>
                   <div className="flex items-center space-x-2">
-                    <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                    {!player.hasSplit ? (
+                      // Normal oyuncu skor gösterimi
+                      <p className="text-gray-700 font-semibold">Skor: <span className="text-lg text-gray-900">{player.score}</span></p>
+                    ) : (
+                      // Split oyuncu - toplam skor gösterimi
+                      <p className="text-gray-700 font-semibold">
+                        Eller: <span className="text-lg text-gray-900">{player.hands?.length || 0}</span> | 
+                        Aktif: <span className="text-lg text-yellow-700">El {(player.currentHandIndex || 0) + 1}</span>
+                      </p>
+                    )}
                     {player.isBlackjack && (
                       <span className="text-yellow-500 text-xl animate-pulse">⭐</span>
                     )}
@@ -1009,23 +1017,92 @@ export default function BlackjackGame() {
                     </button>
                   </div>
                 )}
-                <div className="flex justify-center flex-wrap mb-4 relative">
-                  {player.hand.map((card: Card, index: number) => (
-                    <div key={index} className="relative">
-                      {renderCard(card, index, 
-                        isCardDealing && 
-                        dealingToPlayer === player.id && 
-                        index === player.hand.length - 1 && 
-                        gameState.gameState === 'playing'
-                      )}
-                      {player.isBlackjack && index === player.hand.length - 1 && (
-                        <div className="absolute -top-4 -right-4 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-bold text-sm px-3 py-2 rounded-full shadow-2xl border-3 border-yellow-300 animate-bounce transform rotate-12">
-                          🎉 BLACKJACK! 🎉
+                {/* El/Eller Gösterimi */}
+                {player.hasSplit && player.hands ? (
+                  // Split yapılmış oyuncu - iki el yan yana göster
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {player.hands.map((hand, handIndex) => (
+                        <div key={handIndex} className={`p-4 rounded-lg border-2 ${
+                          isMyTurn && player.id === socketId && player.currentHandIndex === handIndex 
+                            ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-200' 
+                            : 'border-gray-300 bg-gray-50'
+                        }`}>
+                          <div className="text-center mb-2">
+                            <h4 className="font-bold text-sm text-gray-700">
+                              El {handIndex + 1} 
+                              {isMyTurn && player.id === socketId && player.currentHandIndex === handIndex && (
+                                <span className="text-yellow-600 ml-1">🎯</span>
+                              )}
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              Skor: <span className="font-bold">{hand.score}</span> | 
+                              Bahis: <span className="font-bold">{hand.bet.toLocaleString()} 💎</span>
+                            </p>
+                          </div>
+                          
+                          {/* El kartları */}
+                          <div className="flex justify-center flex-wrap mb-2">
+                            {hand.cards.map((card: Card, cardIndex: number) => (
+                              <div key={cardIndex} className="relative">
+                                {renderCard(card, cardIndex, 
+                                  isCardDealing && 
+                                  dealingToPlayer === player.id && 
+                                  cardIndex === hand.cards.length - 1 && 
+                                  gameState.gameState === 'playing'
+                                )}
+                                {hand.isBlackjack && cardIndex === hand.cards.length - 1 && (
+                                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
+                                    BJ!
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {/* El durumu */}
+                          <div className="text-center text-xs">
+                            <span className={`font-medium px-2 py-1 rounded ${
+                              hand.status === 'busted' ? 'bg-red-100 text-red-700' :
+                              hand.status === 'stood' ? 'bg-blue-100 text-blue-700' :
+                              hand.isBlackjack ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {hand.status === 'playing' && hand.isBlackjack && '👑 BLACKJACK!'}
+                              {hand.status === 'playing' && !hand.isBlackjack && '🃏 Oynuyor'}
+                              {hand.status === 'stood' && hand.isBlackjack && '🎉 BJ & Durdu'}
+                              {hand.status === 'stood' && !hand.isBlackjack && (
+                                hand.hasDoubledDown ? '🎰 Double & Durdu' : '✋ Durdu'
+                              )}
+                              {hand.status === 'busted' && (
+                                hand.hasDoubledDown ? '🎰💥 Double & Battı' : '💥 Battı'
+                              )}
+                            </span>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  // Normal oyuncu - tek el göster
+                  <div className="flex justify-center flex-wrap mb-4 relative">
+                    {player.hand.map((card: Card, index: number) => (
+                      <div key={index} className="relative">
+                        {renderCard(card, index, 
+                          isCardDealing && 
+                          dealingToPlayer === player.id && 
+                          index === player.hand.length - 1 && 
+                          gameState.gameState === 'playing'
+                        )}
+                        {player.isBlackjack && index === player.hand.length - 1 && (
+                          <div className="absolute -top-4 -right-4 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-bold text-sm px-3 py-2 rounded-full shadow-2xl border-3 border-yellow-300 animate-bounce transform rotate-12">
+                            🎉 BLACKJACK! 🎉
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="text-center space-y-1">
                   {/* Hit/Stand/Double Down/Split buttons for current player */}
                   {isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
@@ -1153,23 +1230,26 @@ export default function BlackjackGame() {
                       </button>
                     )}
                   </div>
-                  <p className="text-gray-600 capitalize font-medium">
-                    {player.status === 'playing' && player.isBlackjack && '👑 BLACKJACK!'}
-                    {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
-                    {player.status === 'stood' && player.isBlackjack && '🎉 Blackjack & Durdu'}
-                    {player.status === 'stood' && !player.isBlackjack && (
-                      // Check if this is a double down by checking hasDoubledDown flag
-                      player.hasDoubledDown ? 
-                      '🎰 Double Down & Durdu' : 
-                      '✋ Durdu'
-                    )}
-                    {player.status === 'busted' && (
-                      // Check if this is a double down bust using hasDoubledDown flag
-                      player.hasDoubledDown ?
-                      '🎰💥 Double Down & Battı' :
-                      '💥 Battı'
-                    )}
-                  </p>
+                  {!player.hasSplit && (
+                    // Sadece split yapmamış oyuncular için durum göster
+                    <p className="text-gray-600 capitalize font-medium">
+                      {player.status === 'playing' && player.isBlackjack && '👑 BLACKJACK!'}
+                      {player.status === 'playing' && !player.isBlackjack && '🃏 Oynuyor'}
+                      {player.status === 'stood' && player.isBlackjack && '🎉 Blackjack & Durdu'}
+                      {player.status === 'stood' && !player.isBlackjack && (
+                        // Check if this is a double down by checking hasDoubledDown flag
+                        player.hasDoubledDown ? 
+                        '🎰 Double Down & Durdu' : 
+                        '✋ Durdu'
+                      )}
+                      {player.status === 'busted' && (
+                        // Check if this is a double down bust using hasDoubledDown flag
+                        player.hasDoubledDown ?
+                        '🎰💥 Double Down & Battı' :
+                        '💥 Battı'
+                      )}
+                    </p>
+                  )}
                   {resultText && (
                     <p className="text-lg font-bold mt-2" style={{
                       color: resultText === 'Kazandın!' ? '#16a34a' :
@@ -1307,10 +1387,10 @@ export default function BlackjackGame() {
                     <div className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-2xl border-4 border-green-400 shadow-xl">
                       <h4 className="text-xl font-bold text-green-800 mb-3 text-center flex items-center justify-center">
                         <span className="text-2xl mr-2">🏆</span>
-                        {gameState.results.winners.some((w: { id: string; name: string; reason: string }) => w.reason === 'blackjack') ? 'BLACKJACK KAZANAN!' : 'KAZANAN'}
+                        {gameState.results.winners.some((w: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => w.reason === 'blackjack') ? 'BLACKJACK KAZANAN!' : 'KAZANAN'}
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.winners.map((winner: { id: string; name: string; reason: string }) => {
+                        {gameState.results.winners.map((winner: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => {
                           console.log('Winner:', winner.name, 'Reason:', winner.reason);
                           return (
                           <div key={winner.id} className="bg-white p-3 rounded-lg border-2 border-green-300 shadow-sm">
@@ -1323,6 +1403,17 @@ export default function BlackjackGame() {
                               {winner.reason === 'higher_score' && '📈 Yüksek Skor!'}
                               {winner.reason === 'blackjack' && '🎊 BLACKJACK!'}
                             </div>
+                            {/* Tur Detayları */}
+                            {winner.roundBet !== undefined && winner.roundNet !== undefined && (
+                              <div className="mt-2 pt-2 border-t border-green-200">
+                                <div className="text-xs text-green-600 text-center">
+                                  <div>Bahis: <span className="font-bold">{winner.roundBet} 🪙</span></div>
+                                  <div className="text-green-800 font-bold">
+                                    Kazanç: <span className="text-green-600">+{winner.roundNet} 🪙</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           );
                         })}
@@ -1338,7 +1429,7 @@ export default function BlackjackGame() {
                         KAYBEDEN
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.losers.map((loser: { id: string; name: string; reason: string }) => (
+                        {gameState.results.losers.map((loser: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => (
                           <div key={loser.id} className="bg-white p-3 rounded-lg border-2 border-red-300 shadow-sm">
                             <div className="font-bold text-sm text-red-900">{loser.name}</div>
                             <div className="text-red-700 text-xs mt-1 text-center">
@@ -1346,6 +1437,17 @@ export default function BlackjackGame() {
                               {loser.reason === 'lower_score' && '📉 Düşük Skor!'}
                               {loser.reason === 'dealer_blackjack' && '🏠 Krupiyer Blackjack!'}
                             </div>
+                            {/* Tur Detayları */}
+                            {loser.roundBet !== undefined && loser.roundNet !== undefined && (
+                              <div className="mt-2 pt-2 border-t border-red-200">
+                                <div className="text-xs text-red-600 text-center">
+                                  <div>Bahis: <span className="font-bold">{loser.roundBet} 🪙</span></div>
+                                  <div className="text-red-800 font-bold">
+                                    Kayıp: <span className="text-red-600">{loser.roundNet} 🪙</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1360,7 +1462,7 @@ export default function BlackjackGame() {
                         BERABERE
                       </h4>
                       <div className="space-y-2">
-                        {gameState.results.ties.map((tie: { id: string; name: string; reason: string }) => (
+                        {gameState.results.ties.map((tie: { id: string; name: string; reason: string; roundBet?: number; roundWinnings?: number; roundNet?: number }) => (
                           <div key={tie.id} className="bg-white p-3 rounded-lg border-2 border-blue-300 shadow-sm">
                             <div className="font-bold text-sm text-blue-900 flex items-center justify-center">
                               {tie.name}
@@ -1369,8 +1471,25 @@ export default function BlackjackGame() {
                             <div className="text-blue-700 text-xs mt-1 text-center">
                               {tie.reason === 'tie' && '⚖️ Eşit Skor!'}
                               {tie.reason === 'blackjack_push' && '🎭 Blackjack Berabere!'}
-                              {tie.reason === 'both_busted' && '💥 İkisi de Battı - Para Geri Verildi!'}
+                              {tie.reason === 'mixed_results' && '🔄 Karışık Sonuç!'}
                             </div>
+                            {/* Tur Detayları */}
+                            {tie.roundBet !== undefined && tie.roundNet !== undefined && (
+                              <div className="mt-2 pt-2 border-t border-blue-200">
+                                <div className="text-xs text-blue-600 text-center">
+                                  <div>Bahis: <span className="font-bold">{tie.roundBet} 🪙</span></div>
+                                  <div className="text-blue-800 font-bold">
+                                    {tie.roundNet === 0 ? (
+                                      <span className="text-blue-600">Para İade: 0 🪙</span>
+                                    ) : tie.roundNet > 0 ? (
+                                      <span className="text-green-600">+{tie.roundNet} 🪙</span>
+                                    ) : (
+                                      <span className="text-red-600">{tie.roundNet} 🪙</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

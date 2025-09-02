@@ -262,7 +262,8 @@ class BlackjackGame {
 
     // If dealer doesn't have blackjack, play according to rules
     if (!this.dealer.isBlackjack) {
-      while (this.dealer.score < 17) {
+      // Akıllı karar verme mantığı ile kart çek
+      while (this.shouldDealerHit()) {
         this.dealer.hand.push(this.dealCard());
         const newScoreResult = this.calculateScore(this.dealer.hand);
         this.dealer.score = newScoreResult.score;
@@ -272,6 +273,88 @@ class BlackjackGame {
 
     this.calculateResults();
     this.gameState = 'finished';
+  }
+
+  // Akıllı dealer karar verme fonksiyonu
+  shouldDealerHit(): boolean {
+    const dealerScore = this.dealer.score;
+    
+    // 1. Temel kural: 17'den küçükse çek (geleneksel kural)
+    if (dealerScore < 17) {
+      return true;
+    }
+    
+    // 2. Oyuncuların durumunu analiz et
+    const playerAnalysis = this.analyzePlayers();
+    
+    // 3. YENİ KURAL: Eğer en az bir oyuncu bustlamamışsa, dealer onu yenmeye çalışmalı
+    if (playerAnalysis.activePlayers > 0 && dealerScore >= 17) {
+      // Dealer'ın skoru aktif oyuncuların en yükseğinden düşükse, çekmeli
+      if (dealerScore < playerAnalysis.highestPlayerScore) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+    
+    // 4. Kural 2: Eğer dealer oyuncuların hepsinin skorundan fazlaysa, risk alma
+    if (playerAnalysis.allPlayersHaveLowerScore && dealerScore >= 17) {
+      return false;
+    }
+    
+    // 5. Oyuncuların yüksek skorları varsa dikkatli ol
+    if (playerAnalysis.highestPlayerScore >= 18 && dealerScore >= 17 && dealerScore <= 19) {
+      return false;
+    }
+    
+    // 6. Geleneksel kural: 17-21 arası dur
+    if (dealerScore >= 17 && dealerScore <= 21) {
+      return false;
+    }
+    
+    // 7. Bust riski varsa dur
+    if (dealerScore > 21) {
+      return false;
+    }
+    
+    // 8. Diğer durumlarda çek (çok düşük skor)
+    return true;
+  }
+
+  // Oyuncuları analiz eden fonksiyon
+  analyzePlayers() {
+    const players = Array.from(this.players.values());
+    let totalPlayers = 0;
+    let bustedPlayers = 0;
+    let activePlayers = 0;
+    let highestPlayerScore = 0;
+    let allPlayersHaveLowerScore = true;
+    
+    players.forEach(player => {
+      totalPlayers++;
+      if (player.status === 'busted') {
+        bustedPlayers++;
+      } else {
+        activePlayers++;
+        if (player.score > highestPlayerScore) {
+          highestPlayerScore = player.score;
+        }
+        if (player.score >= this.dealer.score) {
+          allPlayersHaveLowerScore = false;
+        }
+      }
+    });
+    
+    const bustedPlayersRatio = totalPlayers > 0 ? bustedPlayers / totalPlayers : 0;
+    
+    return {
+      totalPlayers,
+      activePlayers,
+      bustedPlayers,
+      bustedPlayersRatio,
+      highestPlayerScore,
+      allPlayersHaveLowerScore
+    };
   }
 
   calculateResults() {
