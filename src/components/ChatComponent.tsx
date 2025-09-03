@@ -33,13 +33,7 @@ export default function ChatComponent({
   }, []);
 
   // Use the existing socket game hook for chat functionality
-  const { sendChatMessage, socketId } = useSocketGame(
-    roomId, 
-    playerName, 
-    true,
-    undefined, // currentSessionId
-    handleChatMessage // onChatMessage
-  );
+  const { sendChatMessage, socketId } = useSocketGame(roomId, playerName, true, handleChatMessage);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
