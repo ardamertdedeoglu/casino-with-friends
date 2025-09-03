@@ -51,7 +51,7 @@ interface Player {
   bet: number;
   status: string;
   isBlackjack?: boolean;
-  winnings?: number;
+  netWinnings?: number;
   hasDoubledDown?: boolean;
   // Split specific fields
   hands?: Array<{
@@ -104,6 +104,10 @@ export default function BlackjackGame() {
   const [hasBet, setHasBet] = useState<boolean>(false);
   const [betDecision, setBetDecision] = useState<'bet' | 'no-bet' | null>(null);
   
+  // Önceki bahis bilgilerini saklamak için
+  const [previousBet, setPreviousBet] = useState<number>(0);
+  const [hasPlayedBefore, setHasPlayedBefore] = useState<boolean>(false);
+  
   // Tüm oyuncuların bahis durumlarını takip et
   const [playerBets, setPlayerBets] = useState<{[playerId: string]: {decision: 'bet' | 'no-bet' | null, amount: number}}>({});
 
@@ -113,7 +117,7 @@ export default function BlackjackGame() {
   const [dealingToPlayer, setDealingToPlayer] = useState<string | null>(null);
 
   // Virtual currency hook'u
-  const { userProfile, processWin, processLoss, processTie, getGameRoom } = useVirtualCurrency();
+  const { userProfile, processWin, processLoss, processTie, getGameRoom, placeBet } = useVirtualCurrency();
 
   // Kullanıcı profili yüklendiğinde playerName'i otomatik ayarla
   useEffect(() => {
@@ -388,6 +392,10 @@ export default function BlackjackGame() {
     setHasBet(true);
     setBetDecision('bet');
     
+    // Önceki bahis bilgilerini sakla (oto-bahis için)
+    setPreviousBet(amount);
+    setHasPlayedBefore(true);
+    
     // Global player bets state'ini güncelle
     if (socketId) {
       setPlayerBets(prev => ({
@@ -408,6 +416,34 @@ export default function BlackjackGame() {
     }
 
     console.log(`Bahis yerleştirildi: ${amount} (Session ID: ${sessionId})`);
+  };
+
+  // Oto-bahis fonksiyonu
+  const handleAutoBet = async () => {
+    if (!userProfile || !hasPlayedBefore || previousBet === 0) {
+      return;
+    }
+
+    // Bakiye kontrolü
+    if (previousBet > userProfile.chips) {
+      setResultMessage('Yetersiz bakiye! Önceki bahis miktarınız için yeterli chipiniz yok.');
+      return;
+    }
+
+    try {
+      // Önceki bahis miktarını kullanarak bahis yap
+      const sessionId = await placeBet(roomId, previousBet);
+      
+      if (sessionId) {
+        handleBetPlaced(previousBet, sessionId);
+        setResultMessage(`🍀 Oto-bahis başarılı! ${previousBet.toLocaleString()} 💎 bahis yapıldı.`);
+      } else {
+        setResultMessage('Oto-bahis başarısız oldu. Lütfen tekrar deneyin.');
+      }
+    } catch (error) {
+      console.error('Auto bet error:', error);
+      setResultMessage('Oto-bahis sırasında bir hata oluştu.');
+    }
   };
 
   const handleNoBet = () => {
@@ -754,22 +790,26 @@ export default function BlackjackGame() {
       <div className="absolute top-4 right-4 z-10 w-80">
         <Scoreboard
           scoreboard={(() => {
-            // Oyun sonucu varsa oradan al, yoksa oyuncuların winnings değerlerinden oluştur
+            // Önce oyun sonucu varsa oradan al
             if (gameState?.results?.scoreboard && gameState.results.scoreboard.length > 0) {
               return gameState.results.scoreboard.map(entry => ({
                 id: entry.id,
                 name: entry.name,
-                netWinnings: entry.winnings || 0,
+                netWinnings: entry.netWinnings || 0,
                 isDealer: entry.isDealer
               }));
-            } else if (gameState?.players) {
-              // Oyuncuların winnings değerlerinden scoreboard oluştur
+            }
+            // Sonra sürekli güncellenen scoreboard'dan al
+            else if (gameState?.scoreboard && gameState.scoreboard.length > 0) {
+              return gameState.scoreboard;
+            }
+            // Yoksa oyuncuların netWinnings değerlerinden oluştur
+            else if (gameState?.players) {
               const scoreboardFromPlayers = gameState.players
-                .filter((player: Player) => (player.winnings || 0) > 0)
                 .map((player: Player) => ({
                   id: player.id,
                   name: player.name,
-                  netWinnings: player.winnings || 0,
+                  netWinnings: player.netWinnings || 0,
                   isDealer: false
                 }))
                 .sort((a, b) => b.netWinnings - a.netWinnings);
@@ -1011,19 +1051,6 @@ export default function BlackjackGame() {
                     )}
                   </div>
                 </div>
-                {player.id === socketId && (
-                  <div className="text-center mb-3">
-                    <button
-                      onClick={() => {
-                        setShowNameChangeModal(true);
-                        setNewPlayerName(player.name);
-                      }}
-                      className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1 rounded-lg font-bold text-sm hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
-                    >
-                      ✏️ İsim Değiştir
-                    </button>
-                  </div>
-                )}
                 {/* El/Eller Gösterimi */}
                 {player.hasSplit && player.hands ? (
                   // Split yapılmış oyuncu - iki el yan yana göster
@@ -1160,7 +1187,7 @@ export default function BlackjackGame() {
                     </div>
                   )}
                   {/* Bahis Bilgileri - Herkes için görünür */}
-                  <div className="mt-3 p-3 bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg border border-purple-300">
+                  <div className="mt-3 p-3 bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg border border-purple-300 shadow-md">
                     {/* Bahis Durumu */}
                     <div className="flex items-center justify-center mb-2">
                       <div className="flex items-center space-x-2">
@@ -1216,8 +1243,8 @@ export default function BlackjackGame() {
                         </div>
                       </div>
                     )}
-                    
-                    {/* Bahis Butonları - Sadece kendi için */}
+                    <div className="flex">
+                      {/* Bahis Butonları - Sadece kendi için */}
                     {player.id === socketId && joined && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') && !hasBet && (
                       <button
                         onClick={() => setShowBetModal(true)}
@@ -1226,6 +1253,25 @@ export default function BlackjackGame() {
                         🎯 Bahis Yap
                       </button>
                     )}
+                    {player.id === socketId && joined && userProfile && (gameState?.gameState === 'waiting' || gameState?.gameState === 'finished') && !hasBet && (
+                      <button
+                        onClick={handleAutoBet}
+                        disabled={!hasPlayedBefore || previousBet === 0 || previousBet > userProfile.chips}
+                        className={`w-full px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border-2 ${
+                          !hasPlayedBefore || previousBet === 0 || previousBet > userProfile.chips
+                            ? 'bg-gray-500 text-gray-300 cursor-not-allowed border-gray-400'
+                            : 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 border-green-400'
+                        }`}
+                      >
+                        🍀 Oto-Bahis
+                        {hasPlayedBefore && previousBet > 0 && (
+                          <span className="block text-xs opacity-80">
+                            ({previousBet.toLocaleString()} 💎)
+                          </span>
+                        )}
+                      </button>
+                    )}</div>
+                    
                   </div>
                   {!player.hasSplit && (
                     // Sadece split yapmamış oyuncular için durum göster

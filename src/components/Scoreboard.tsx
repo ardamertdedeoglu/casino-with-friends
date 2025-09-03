@@ -17,7 +17,7 @@ export default function Scoreboard({ scoreboard, className = '' }: ScoreboardPro
     return (
       <div className={`bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-2xl border-2 border-gray-600 ${className}`}>
         <h3 className="text-lg font-bold text-yellow-400 mb-3 text-center">🏆 SKOR TABLOSU</h3>
-        <p className="text-gray-400 text-sm text-center">Henüz kazanma yok</p>
+        <p className="text-gray-400 text-sm text-center">Henüz oyun başlamadı</p>
       </div>
     );
   }

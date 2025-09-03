@@ -508,44 +508,44 @@ class BlackjackGame {
   // Akıllı dealer karar verme fonksiyonu
   shouldDealerHit() {
     const dealerScore = this.dealer.score;
-    
-    // 1. Temel kural: 17'den küçükse çek (geleneksel kural)
-    if (dealerScore < 17) {
-      console.log(`🎩 Rule 1: Dealer score ${dealerScore} < 17, must hit`);
-      return true;
-    }
-    
-    // 2. Oyuncuların durumunu analiz et
+
+    // 1. Oyuncuların durumunu analiz et
     const playerAnalysis = this.analyzePlayers();
     console.log('🎩 Player analysis:', playerAnalysis);
-    
-    // 3. YENİ KURAL: Eğer en az bir oyuncu bustlamamışsa, dealer onu yenmeye çalışmalı
+
+    // 2. ÖNEMLİ KURAL: Eğer tüm aktif oyuncular dealer'dan düşükse, dealer durmalı (17'den küçük olsa bile)
+    if (playerAnalysis.activePlayers > 0 && playerAnalysis.allPlayersHaveLowerScore) {
+      console.log(`🎩 Rule 1: All active players have lower score than dealer (${dealerScore}), dealer stands to avoid bust risk`);
+      return false;
+    }
+
+    // 3. Temel kural: 17'den küçükse çek (geleneksel kural)
+    if (dealerScore < 17) {
+      console.log(`🎩 Rule 2: Dealer score ${dealerScore} < 17, must hit`);
+      return true;
+    }
+
+    // 4. YENİ KURAL: Eğer en az bir oyuncu dealer'dan yüksekse, dealer çekmeli
     if (playerAnalysis.activePlayers > 0 && dealerScore >= 17) {
       // Dealer'ın skoru aktif oyuncuların en yükseğinden düşükse, çekmeli
       if (dealerScore < playerAnalysis.highestPlayerScore) {
-        console.log(`🎩 Rule 2: Dealer score ${dealerScore} < highest player score ${playerAnalysis.highestPlayerScore}, must hit to try to beat them`);
+        console.log(`🎩 Rule 3: Dealer score ${dealerScore} < highest player score ${playerAnalysis.highestPlayerScore}, must hit to try to beat them`);
         return true;
       } else {
-        console.log(`🎩 Rule 2: Dealer score ${dealerScore} >= highest player score ${playerAnalysis.highestPlayerScore}, can stand`);
+        console.log(`🎩 Rule 4: Dealer score ${dealerScore} >= highest player score ${playerAnalysis.highestPlayerScore}, can stand`);
         return false;
       }
     }
-    
-    // 4. Kural 2: Eğer dealer oyuncuların hepsinin skorundan fazlaysa, risk alma
-    if (playerAnalysis.allPlayersHaveLowerScore && dealerScore >= 17) {
-      console.log(`🎩 Rule 3: Dealer score ${dealerScore} > all players, standing to avoid bust risk`);
-      return false;
-    }
-    
+
     // 5. Oyuncuların yüksek skorları varsa dikkatli ol
     if (playerAnalysis.highestPlayerScore >= 18 && dealerScore >= 17 && dealerScore <= 19) {
-      console.log(`🎩 Rule 4: High player scores detected (${playerAnalysis.highestPlayerScore}), being cautious`);
+      console.log(`🎩 Rule 5: High player scores detected (${playerAnalysis.highestPlayerScore}), being cautious`);
       return false;
     }
-    
+
     // 6. Geleneksel kural: 17-21 arası dur
     if (dealerScore >= 17 && dealerScore <= 21) {
-      console.log(`🎩 Rule 5: Traditional rule - dealer stands with ${dealerScore}`);
+      console.log(`🎩 Rule 6: Traditional rule - dealer stands with ${dealerScore}`);
       return false;
     }
     
@@ -788,32 +788,55 @@ class BlackjackGame {
       }
     }
 
-    // Add dealer to scoreboard if they won
-    if (dealerWins > 0) {
-      results.scoreboard.push({
-        id: 'dealer',
-        name: '🏠 Krupiyer',
-        netWinnings: dealerWins,
-        isDealer: true
-      });
-    }
+    // Add dealer to scoreboard
+    results.scoreboard.push({
+      id: 'dealer',
+      name: '🏠 Krupiyer',
+      netWinnings: dealerWins,
+      isDealer: true
+    });
 
     // Add players to scoreboard
     for (const [playerId, player] of this.players) {
-      if (player.netWinnings !== 0) { // Show both positive and negative
-        results.scoreboard.push({
-          id: playerId,
-          name: player.name,
-          netWinnings: player.netWinnings,
-          isDealer: false
-        });
+      results.scoreboard.push({
+        id: playerId,
+        name: player.name,
+        netWinnings: player.netWinnings,
+        isDealer: false
+      });
+    }
+
+    // Sort scoreboard by net winnings (highest first)
+    results.scoreboard.sort((a, b) => b.netWinnings - a.netWinnings);
+
+    this.results = results;
+  }
+
+  getCurrentScoreboard() {
+    const scoreboard = [];
+
+    // Dealer'ı ekle (eğer dealerWins varsa)
+    if (this.results?.scoreboard?.find(entry => entry.isDealer)) {
+      const dealerEntry = this.results.scoreboard.find(entry => entry.isDealer);
+      if (dealerEntry) {
+        scoreboard.push(dealerEntry);
       }
     }
 
-    // Sort scoreboard by winnings (highest first)
-    results.scoreboard.sort((a, b) => b.winnings - a.winnings);
+    // Oyuncuları ekle
+    for (const [playerId, player] of this.players) {
+      scoreboard.push({
+        id: playerId,
+        name: player.name,
+        netWinnings: player.netWinnings,
+        isDealer: false
+      });
+    }
 
-    this.results = results;
+    // Sort scoreboard by net winnings (highest first)
+    scoreboard.sort((a, b) => b.netWinnings - a.netWinnings);
+
+    return scoreboard;
   }
 
   getDealerVisibleScore() {
@@ -858,6 +881,7 @@ class BlackjackGame {
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
       results: this.results || null,
+      scoreboard: this.getCurrentScoreboard(), // Her zaman güncel scoreboard gönder
       deckCount: this.deck.length // Kalan kart sayısı
     };
   }

@@ -74,7 +74,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setShowChipDeposit(true)}
-                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 cursor-pointer"
               >
                 💰 Chip Yatır
               </button>
@@ -149,20 +149,20 @@ export default function Home() {
                   <button
                     onClick={handleJoinRoom}
                     disabled={!roomId.trim()}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
+                    className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 cursor-pointer"
                   >
                     Odaya Katıl
                   </button>
                   <button
                     onClick={handleRandomRoom}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 cursor-pointer"
                   >
                     Rastgele Oda
                   </button>
                 </div>
                 <button
                   onClick={() => setShowRoomInput(false)}
-                  className="w-full bg-gray-500 text-white p-3 rounded-xl font-bold text-lg hover:bg-gray-600 transition-all duration-200"
+                  className="w-full bg-gray-500 text-white p-3 rounded-xl font-bold text-lg hover:bg-gray-600 transition-all duration-200 cursor-pointer"
                 >
                   İptal
                 </button>

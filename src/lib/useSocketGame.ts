@@ -14,6 +14,7 @@ interface Player {
   bet: number;
   status: string;
   isBlackjack?: boolean;
+  netWinnings?: number;
   hasDoubledDown?: boolean;
   // Split specific fields
   hands?: Array<{
@@ -66,13 +67,14 @@ interface GameState {
   gameState: string;
   currentPlayer: string;
   deckCount?: number; // Destede kalan kart sayısı
+  scoreboard?: Array<{ id: string; name: string; netWinnings: number; isDealer: boolean }>;
   results?: {
     dealerBusted: boolean;
     dealerBlackjack?: boolean;
     winners: Array<{ id: string; name: string; reason: string }>;
     losers: Array<{ id: string; name: string; reason: string }>;
     ties: Array<{ id: string; name: string; reason: string }>;
-    scoreboard?: Array<{ id: string; name: string; winnings: number; isDealer: boolean }>;
+    scoreboard?: Array<{ id: string; name: string; netWinnings: number; isDealer: boolean }>;
   } | null;
 }
 
