@@ -93,7 +93,7 @@ class BlackjackGame {
       }],
       currentHandIndex: 0, // Hangi el oynuyor
       hasSplit: false,
-      winnings: 0, // Track total winnings across games
+      netWinnings: 0, // Track net winnings/losses across games
       // Insurance fields
       hasInsurance: false,
       insuranceBet: 0
@@ -729,11 +729,11 @@ class BlackjackGame {
         }
       }
       
-      // Apply winnings to player
-      player.winnings += totalWinnings;
-      
       // O turda net kazanç/kayıp hesapla
       const roundNetGain = totalWinnings - totalBetAmount;
+      
+      // Apply net winnings/losses to player
+      player.netWinnings += roundNetGain;
       
       console.log(`💰 ${player.name} total bet: ${totalBetAmount}, total winnings: ${totalWinnings}, round net: ${roundNetGain}`);
       
@@ -793,18 +793,18 @@ class BlackjackGame {
       results.scoreboard.push({
         id: 'dealer',
         name: '🏠 Krupiyer',
-        winnings: dealerWins,
+        netWinnings: dealerWins,
         isDealer: true
       });
     }
 
     // Add players to scoreboard
     for (const [playerId, player] of this.players) {
-      if (player.winnings > 0) {
+      if (player.netWinnings !== 0) { // Show both positive and negative
         results.scoreboard.push({
           id: playerId,
           name: player.name,
-          winnings: player.winnings,
+          netWinnings: player.netWinnings,
           isDealer: false
         });
       }
@@ -836,7 +836,7 @@ class BlackjackGame {
         status: currentHand.status,
         isBlackjack: currentHand.isBlackjack,
         hasDoubledDown: currentHand.hasDoubledDown,
-        winnings: player.winnings,
+        netWinnings: player.netWinnings,
         // Split specific data
         hands: player.hands,
         currentHandIndex: player.currentHandIndex,
@@ -1057,12 +1057,12 @@ app.prepare().then(() => {
       console.log(`🔄 Reset room requested for: ${roomId} by ${socket.id}`);
       const oldGame = gameRooms.get(roomId);
       if (oldGame) {
-        // Eski oyun nesnesindeki oyuncuların winnings değerlerini kaydet
-        const playerWinnings = new Map();
+        // Eski oyun nesnesindeki oyuncuların netWinnings değerlerini kaydet
+        const playerNetWinnings = new Map();
         for (const [playerId, player] of oldGame.players) {
-          playerWinnings.set(playerId, {
+          playerNetWinnings.set(playerId, {
             name: player.name,
-            winnings: player.winnings || 0
+            netWinnings: player.netWinnings || 0
           });
         }
 
@@ -1070,12 +1070,12 @@ app.prepare().then(() => {
         const newGame = new BlackjackGame(roomId, io);
         gameRooms.set(roomId, newGame);
 
-        // Eski oyuncuları yeni oyuna ekle ve winnings değerlerini geri yükle
-        for (const [playerId, playerData] of playerWinnings) {
+        // Eski oyuncuları yeni oyuna ekle ve netWinnings değerlerini geri yükle
+        for (const [playerId, playerData] of playerNetWinnings) {
           newGame.addPlayer(playerId, playerData.name);
           const newPlayer = newGame.players.get(playerId);
           if (newPlayer) {
-            newPlayer.winnings = playerData.winnings;
+            newPlayer.netWinnings = playerData.netWinnings;
           }
         }
 

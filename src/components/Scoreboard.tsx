@@ -3,7 +3,7 @@
 interface ScoreboardEntry {
   id: string;
   name: string;
-  winnings: number;
+  netWinnings: number;
   isDealer: boolean;
 }
 
@@ -60,9 +60,13 @@ export default function Scoreboard({ scoreboard, className = '' }: ScoreboardPro
 
             <div className="flex items-center space-x-1">
               <span className={`text-lg font-bold ${
-                entry.isDealer ? 'text-red-400' : 'text-green-400'
+                entry.netWinnings > 0
+                  ? 'text-green-400'
+                  : entry.netWinnings < 0
+                    ? 'text-red-400'
+                    : 'text-gray-400'
               }`}>
-                {entry.winnings}
+                {entry.netWinnings > 0 ? '+' : ''}{entry.netWinnings}
               </span>
               <span className="text-yellow-400 text-sm">💰</span>
             </div>
@@ -72,7 +76,7 @@ export default function Scoreboard({ scoreboard, className = '' }: ScoreboardPro
 
       <div className="mt-3 pt-3 border-t border-gray-600">
         <p className="text-xs text-gray-400 text-center">
-          Blackjack: 2 puan • Normal kazanma: 1 puan
+          <span className="text-green-400">+ Yeşil:</span> Net kazanç • <span className="text-red-400">- Kırmızı:</span> Net kayıp
         </p>
       </div>
     </div>

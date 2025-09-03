@@ -72,7 +72,7 @@ interface Player {
 interface ScoreboardEntry {
   id: string;
   name: string;
-  winnings: number;
+  netWinnings: number;
   isDealer: boolean;
 }
 
@@ -756,7 +756,12 @@ export default function BlackjackGame() {
           scoreboard={(() => {
             // Oyun sonucu varsa oradan al, yoksa oyuncuların winnings değerlerinden oluştur
             if (gameState?.results?.scoreboard && gameState.results.scoreboard.length > 0) {
-              return gameState.results.scoreboard;
+              return gameState.results.scoreboard.map(entry => ({
+                id: entry.id,
+                name: entry.name,
+                netWinnings: entry.winnings || 0,
+                isDealer: entry.isDealer
+              }));
             } else if (gameState?.players) {
               // Oyuncuların winnings değerlerinden scoreboard oluştur
               const scoreboardFromPlayers = gameState.players
@@ -764,10 +769,10 @@ export default function BlackjackGame() {
                 .map((player: Player) => ({
                   id: player.id,
                   name: player.name,
-                  winnings: player.winnings || 0,
+                  netWinnings: player.winnings || 0,
                   isDealer: false
                 }))
-                .sort((a, b) => b.winnings - a.winnings);
+                .sort((a, b) => b.netWinnings - a.netWinnings);
 
               return scoreboardFromPlayers;
             }
