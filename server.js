@@ -374,6 +374,13 @@ class BlackjackGame {
         currentHand.bet *= 2;
         currentHand.hasDoubledDown = true;
         
+        // playerBets'i de güncelle (hesaplamalar için)
+        if (this.playerBets && this.playerBets.has(playerId)) {
+          const betInfo = this.playerBets.get(playerId);
+          betInfo.amount = currentHand.bet;
+          console.log(`💰 Updated playerBets for ${playerId}: ${betInfo.amount}`);
+        }
+        
         console.log(`🎰 Player ${playerId} (${player.name}) doubled down on hand ${player.currentHandIndex}! New bet: ${currentHand.bet}`);
         
         // Bir kart dağıt
@@ -700,8 +707,8 @@ class BlackjackGame {
           playerLost = true;
           dealerWins++; // Dealer wins with blackjack
         }
-        // Dealer busted (player didn't)
-        else if (this.dealer.score > 21) {
+        // Dealer busted (player didn't) - sadece bu hand için bir kere kontrol et
+        else if (this.dealer.score > 21 && hand.status !== 'busted') {
           console.log(`🎉 Hand ${handIndex}: Dealer busted - player wins`);
           totalWinnings += hand.bet * 2; // Bahis + 1:1 kazanç
           playerWon = true;
@@ -716,48 +723,6 @@ class BlackjackGame {
           playerLost = true;
           dealerWins++; // Dealer wins with higher score
         } else {
-          console.log(`🤝 Hand ${handIndex}: Same score (${hand.score}) - push`);
-          totalWinnings += hand.bet; // Bahis geri verilir
-          playerTied = true;
-        }
-        
-        // Player hand has blackjack
-        if (hand.isBlackjack && hand.status !== 'busted') {
-          if (this.dealer.isBlackjack) {
-            // Both have blackjack - push (tie) - bahis geri verilir
-            console.log(`🤝 Hand ${handIndex}: Both have blackjack - push`);
-            totalWinnings += hand.bet; // Bahis geri verilir
-            playerTied = true;
-          } else {
-            // Player blackjack wins - 3:2 payout
-            console.log(`🎉 Hand ${handIndex}: Player blackjack wins`);
-            const blackjackPayout = hand.bet + Math.floor(hand.bet * 1.5); // Bahis + 1.5x kazanç
-            totalWinnings += blackjackPayout;
-            playerWon = true;
-          }
-        }
-        // Dealer has blackjack (player doesn't)
-        else if (this.dealer.isBlackjack && hand.status !== 'busted') {
-          console.log(`😞 Hand ${handIndex}: Dealer blackjack - player loses`);
-          playerLost = true;
-          dealerWins++; // Dealer wins with blackjack
-        }
-        // Dealer busted (player didn't)
-        else if (this.dealer.score > 21 && hand.status !== 'busted') {
-          console.log(`🎉 Hand ${handIndex}: Dealer busted - player wins`);
-          totalWinnings += hand.bet * 2; // Bahis + 1:1 kazanç
-          playerWon = true;
-        }
-        // Compare scores (neither busted, neither has blackjack)
-        else if (hand.status !== 'busted' && hand.score > this.dealer.score) {
-          console.log(`🎉 Hand ${handIndex}: Player higher score (${hand.score} vs ${this.dealer.score}) - player wins`);
-          totalWinnings += hand.bet * 2; // Bahis + 1:1 kazanç
-          playerWon = true;
-        } else if (hand.status !== 'busted' && hand.score < this.dealer.score) {
-          console.log(`😞 Hand ${handIndex}: Dealer higher score (${this.dealer.score} vs ${hand.score}) - dealer wins`);
-          playerLost = true;
-          dealerWins++; // Dealer wins with higher score
-        } else if (hand.status !== 'busted') {
           console.log(`🤝 Hand ${handIndex}: Same score (${hand.score}) - push`);
           totalWinnings += hand.bet; // Bahis geri verilir
           playerTied = true;

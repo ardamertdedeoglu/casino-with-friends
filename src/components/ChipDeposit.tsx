@@ -13,7 +13,7 @@ export default function ChipDeposit({ onClose }: ChipDepositProps) {
   const [message, setMessage] = useState('');
   const { userProfile, depositChips, refreshProfile } = useVirtualCurrency();
 
-  const predefinedAmounts = [500, 1000, 2500, 5000, 10000];
+  const predefinedAmounts = [500, 1000, 2500, 5000, 10000, 25000];
 
   const handleDeposit = async () => {
     if (amount <= 0) {

@@ -206,13 +206,11 @@ export default function BlackjackGame() {
         // Kart çekildi - animasyon tetikle
         setIsCardDealing(true);
         
-        // Krupiyer sırası mı kontrol et
+        // Sadece dealer turn sırasında animasyon uygula
         if (gameState.gameState === 'dealer_turn') {
           setDealingToPlayer('dealer');
-        } else if (gameState.gameState === 'playing') {
-          setDealingToPlayer(gameState.currentPlayer);
         } else {
-          // Diğer durumlarda animasyonu hemen kapat
+          // Diğer durumlarda animasyon uygulama
           setDealingToPlayer(null);
         }
         
@@ -633,8 +631,7 @@ export default function BlackjackGame() {
   const renderCardBack = () => {
     return (
       <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 border-2 border-blue-400 rounded-lg p-3 m-2 text-center shadow-lg transform hover:scale-105 transition-transform duration-200 min-w-[60px] min-h-[80px] flex flex-col justify-center items-center">
-        <div className="text-white text-2xl font-bold">♠</div>
-        <div className="text-white text-xs">CASINO</div>
+        <div className="text-white text-xl font-bold">♠</div>
         <div className="text-white text-2xl font-bold rotate-180">♠</div>
       </div>
     );
@@ -791,6 +788,17 @@ export default function BlackjackGame() {
           }}
           className="mt-4"
         />
+
+        {/* Kullanıcı Bahis Göstergesi */}
+        {userProfile && (
+          <div className="mt-4 p-3 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg border border-blue-300 shadow-lg">
+            <div className="flex items-center justify-center space-x-2">
+              <span className="text-blue-600 font-bold text-sm">🫵 Sen:</span>
+              <span className="text-xl font-bold text-blue-700">{userProfile.chips.toLocaleString()}</span>
+              <span className="text-blue-600 text-xl">💎</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="max-w-6xl mx-auto">
@@ -827,7 +835,7 @@ export default function BlackjackGame() {
           {/* Krupiyer başlık ve bilgiler */}
           <div className="flex flex-col lg:flex-row items-center justify-between mb-4 space-y-3 lg:space-y-0">
             {/* Sol taraf - Ev Kasası */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 lg:flex-1">
               <span className="text-green-300 font-bold text-sm sm:text-base">💰 Ev Kasası:</span>
               <span className="text-lg sm:text-xl font-bold text-green-400">
                 {gameRoom?.house_chips ? gameRoom.house_chips.toLocaleString() : '---'}
@@ -836,54 +844,12 @@ export default function BlackjackGame() {
             </div>
             
             {/* Orta - Krupiyer başlığı */}
-            <h2 className="text-2xl font-bold text-yellow-400">🏠 KRUPİYER</h2>
-            
-            {/* Sağ taraf - Kullanıcı bilgileri */}
-            <div className="flex items-center space-x-4">
-              {userProfile && (
-                <div className="flex items-center space-x-2">
-                  <span className="text-blue-300 font-bold text-sm sm:text-base">🫵 Sen:</span>
-                  <span className="text-lg sm:text-xl font-bold text-blue-400">{userProfile.chips.toLocaleString()}</span>
-                  <span className="text-blue-400 text-lg sm:text-xl">💎</span>
-                </div>
-              )}
-              
-              {/* Kart Destesi - sağ üstte */}
-              <div className="relative ml-4">
-                <div className="relative">
-                  {/* Alt kartlar (gölge efekti için) */}
-                  {[...Array(Math.min(3, Math.max(1, Math.ceil((gameState.deckCount || 52) / 17))))].map((_, index) => (
-                    <div
-                      key={index}
-                      className={`absolute bg-gradient-to-br from-blue-700 via-blue-800 to-blue-900 border border-blue-500 rounded-md w-10 h-14 shadow-md transition-all duration-300 ${
-                        isCardDealing ? 'card-receive' : ''
-                      }`}
-                      style={{
-                        transform: `translateY(-${index * 1}px) translateX(-${index * 0.5}px) rotate(${index * 0.5}deg)`,
-                        zIndex: index
-                      }}
-                    />
-                  ))}
-                  
-                  {/* En üstteki kart */}
-                  <div 
-                    className={`bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 border border-blue-400 rounded-md w-10 h-14 flex flex-col items-center justify-center text-white shadow-lg relative transition-all duration-300 ${
-                      isCardDealing ? 'card-deal' : gameState.gameState === 'playing' ? 'deck-shuffle' : ''
-                    }`}
-                    style={{ zIndex: 10 }}
-                  >
-                    <div className="text-xs font-bold">♠</div>
-                    <div className="text-[6px] font-bold">CASINO</div>
-                    <div className="text-xs font-bold rotate-180">♠</div>
-                  </div>
-                  
-                  {/* Kart sayısı göstergesi */}
-                  <div className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px] font-bold border border-white shadow-sm z-20">
-                    {gameState.deckCount || 52}
-                  </div>
-                </div>
-              </div>
+            <div className="lg:flex-1 flex justify-center">
+              <h2 className="text-2xl font-bold text-yellow-400">🏠 KRUPİYER</h2>
             </div>
+            
+            {/* Sağ taraf - Boş alan (dengeleme için) */}
+            <div className="lg:flex-1"></div>
           </div>
           
           <div className="flex justify-center flex-wrap relative">
@@ -906,11 +872,47 @@ export default function BlackjackGame() {
               </div>
             ))}
           </div>
-          <div className="text-center mt-4">
+          <div className="text-center mt-4 relative">
             <p className="text-yellow-300 text-lg font-semibold">Skor: <span className="text-white text-xl">{gameState.dealer.visibleScore}</span></p>
             {gameState.dealer.isBlackjack && !gameState.dealer.hiddenCard && (
               <p className="text-red-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! 🃏</p>
             )}
+
+            {/* Kart Destesi - sağ altta, daha büyük */}
+            <div className="absolute bottom-0 right-0 mb-2 mr-4">
+              <div className="relative">
+                {/* Alt kartlar (gölge efekti için) */}
+                {[...Array(Math.min(4, Math.max(1, Math.ceil((gameState.deckCount || 52) / 13))))].map((_, index) => (
+                  <div
+                    key={index}
+                    className={`absolute bg-gradient-to-br from-blue-700 via-blue-800 to-blue-900 border border-blue-500 rounded-lg w-16 h-20 shadow-lg transition-all duration-300 ${
+                      isCardDealing ? 'card-receive' : ''
+                    }`}
+                    style={{
+                      transform: `translateY(-${index * 2}px) translateX(-${index * 1}px) rotate(${index * 0.8}deg)`,
+                      zIndex: index
+                    }}
+                  />
+                ))}
+
+                {/* En üstteki kart */}
+                <div
+                  className={`bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 border-2 border-blue-400 rounded-lg w-16 h-20 flex flex-col items-center justify-center text-white shadow-xl relative transition-all duration-300 ${
+                    isCardDealing ? 'card-deal' : gameState.gameState === 'playing' ? 'deck-shuffle' : ''
+                  }`}
+                  style={{ zIndex: 10 }}
+                >
+                  <div className="text-sm font-bold">♠</div>
+                  <div className="text-[8px] font-bold">CASINO</div>
+                  <div className="text-sm font-bold rotate-180">♠</div>
+                </div>
+
+                {/* Kart sayısı göstergesi */}
+                <div className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-lg z-20">
+                  {gameState.deckCount || 52}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1045,12 +1047,7 @@ export default function BlackjackGame() {
                           <div className="flex justify-center flex-wrap mb-2">
                             {hand.cards.map((card: Card, cardIndex: number) => (
                               <div key={cardIndex} className="relative">
-                                {renderCard(card, cardIndex, 
-                                  isCardDealing && 
-                                  dealingToPlayer === player.id && 
-                                  cardIndex === hand.cards.length - 1 && 
-                                  gameState.gameState === 'playing'
-                                )}
+                                {renderCard(card, cardIndex, false)}
                                 {hand.isBlackjack && cardIndex === hand.cards.length - 1 && (
                                   <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
                                     BJ!
@@ -1088,12 +1085,7 @@ export default function BlackjackGame() {
                   <div className="flex justify-center flex-wrap mb-4 relative">
                     {player.hand.map((card: Card, index: number) => (
                       <div key={index} className="relative">
-                        {renderCard(card, index, 
-                          isCardDealing && 
-                          dealingToPlayer === player.id && 
-                          index === player.hand.length - 1 && 
-                          gameState.gameState === 'playing'
-                        )}
+                        {renderCard(card, index, false)}
                         {player.isBlackjack && index === player.hand.length - 1 && (
                           <div className="absolute -top-4 -right-4 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-bold text-sm px-3 py-2 rounded-full shadow-2xl border-3 border-yellow-300 animate-bounce transform rotate-12">
                             🎉 BLACKJACK! 🎉
