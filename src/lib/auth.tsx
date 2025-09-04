@@ -35,6 +35,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Handle email confirmation
+      if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
+        // User has confirmed their email, redirect to home
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -42,6 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, username: string) => {
     try {
+      // Get the current site URL dynamically
+      const siteUrl = typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.host}`
+        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -49,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: {
             username: username,
           },
+          emailRedirectTo: `${siteUrl}/auth/callback`,
         },
       });
 
