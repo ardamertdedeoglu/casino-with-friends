@@ -124,6 +124,14 @@ export default function BlackjackGame() {
   const [lastDeckCount, setLastDeckCount] = useState(52);
   const [dealingToPlayer, setDealingToPlayer] = useState<string | null>(null);
 
+  // UI toggle state'leri - küçük ekranlar için
+  const [showScoreboard, setShowScoreboard] = useState(false);
+  const [showSoundControl, setShowSoundControl] = useState(false);
+
+  // Ayarlar için state'ler
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState<{deckCount: number, roomOwner: string | null, totalCards: number} | null>(null);
+
   // Virtual currency hook'u
   const { userProfile, processWin, processLoss, processTie, getGameRoom, placeBet } = useVirtualCurrency();
 
@@ -190,7 +198,7 @@ export default function BlackjackGame() {
     setPlayerBets({});
   }, []);
 
-  const { gameState, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error, sendBetDecision, requestBettingStatus } = useSocketGame(
+  const { gameState, gameSettings, joinGame, makeMove, startGame, restartGame, leaveGame, resetRoom, changeName, isLoading, socketId, error, sendBetDecision, requestBettingStatus, requestSettings, updateSettings, leaveRoom } = useSocketGame(
     roomId, 
     playerName, 
     joined,
@@ -274,6 +282,22 @@ export default function BlackjackGame() {
       return () => clearTimeout(timer);
     }
   }, [gameState, isLoading]);
+
+  // gameSettings state'ini güncelle
+  useEffect(() => {
+    if (gameSettings) {
+      setSettings(gameSettings);
+    } else if (gameState?.settings) {
+      setSettings(gameState.settings);
+    }
+  }, [gameSettings, gameState?.settings]);
+
+  // Oyuna katıldıktan sonra ayarları yükle
+  useEffect(() => {
+    if (joined && requestSettings) {
+      requestSettings();
+    }
+  }, [joined, requestSettings]);
 
   // Yeni oyun başladığında bahisleri sıfırla
   useEffect(() => {
@@ -429,6 +453,9 @@ export default function BlackjackGame() {
   const handleLeaveGame = async () => {
     if (playerId && roomId) {
       await leaveGame(playerId);
+      if (leaveRoom) {
+        leaveRoom();
+      }
       setJoined(false);
       setPlayerId('');
     }
@@ -878,72 +905,181 @@ export default function BlackjackGame() {
         <div className="absolute top-4 left-4 z-10">
           <button
             onClick={copyInviteLink}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center space-x-2"
+            className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white p-4 rounded-full font-bold text-sm hover:from-yellow-700 hover:to-yellow-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center w-12 h-12"
+            title="Davet Linkini Kopyala"
           >
-            <span className="text-lg">👥</span>
-            <span>ARKADAŞLARINI DAVET ET</span>
+            <span className="text-xl">👥</span>
           </button>
         </div>
       )}
 
       {/* Scoreboard - Top Right Corner */}
       <div className="absolute top-4 right-4 z-10 w-80">
-        <Scoreboard
-          scoreboard={(() => {
-            // Önce oyun sonucu varsa oradan al
-            if (gameState?.results?.scoreboard && gameState.results.scoreboard.length > 0) {
-              return gameState.results.scoreboard.map(entry => ({
-                id: entry.id,
-                name: entry.name,
-                netWinnings: entry.netWinnings || 0,
-                isDealer: entry.isDealer
-              }));
-            }
-            // Sonra sürekli güncellenen scoreboard'dan al
-            else if (gameState?.scoreboard && gameState.scoreboard.length > 0) {
-              return gameState.scoreboard;
-            }
-            // Yoksa oyuncuların netWinnings değerlerinden oluştur
-            else if (gameState?.players) {
-              const scoreboardFromPlayers = gameState.players
-                .map((player: Player) => ({
-                  id: player.id,
-                  name: player.name,
-                  netWinnings: player.netWinnings || 0,
-                  isDealer: false
-                }))
-                .sort((a, b) => b.netWinnings - a.netWinnings);
+        {/* Toggle buttons - Always visible */}
+        <div className="flex flex-col items-end space-y-3">
+          {/* Settings Toggle Button - Only visible to room owner */}
+          {settings?.roomOwner === socketId && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-3 rounded-full shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-blue-500 flex items-center justify-center w-12 h-12"
+              title="Oda Ayarları"
+            >
+              <span className="text-xl">⚙️</span>
+            </button>
+          )}
 
-              return scoreboardFromPlayers;
-            }
-            return [];
-          })()}
-          className="shadow-2xl"
-        />
+          {/* Scoreboard Toggle Button */}
+          <button
+            onClick={() => setShowScoreboard(!showScoreboard)}
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white p-3 rounded-full shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-green-500 flex items-center justify-center w-12 h-12"
+            title="Skor Tablosu"
+          >
+            <span className="text-xl">🏆</span>
+          </button>
 
-        {/* Sound Volume Control */}
-        <SoundVolumeControl
-          onVolumeChange={(volume) => {
-            if (turnSoundRef.current) {
-              turnSoundRef.current.volume = volume;
-            }
-            if (blackjackSoundRef.current) {
-              blackjackSoundRef.current.volume = volume;
-            }
-          }}
-          className="mt-4"
-        />
+          {/* Sound Control Toggle Button */}
+          <button
+            onClick={() => setShowSoundControl(!showSoundControl)}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-3 rounded-full shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-purple-500 flex items-center justify-center w-12 h-12"
+            title="Ses Ayarları"
+          >
+            <span className="text-xl">🔊</span>
+          </button>
 
-        {/* Kullanıcı Bahis Göstergesi */}
-        {userProfile && (
-          <div className="mt-4 p-3 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg border border-blue-300 shadow-lg">
-            <div className="flex items-center justify-center space-x-2">
-              <span className="text-blue-600 font-bold text-sm">🫵 Sen:</span>
-              <span className="text-xl font-bold text-blue-700">{userProfile.chips.toLocaleString()}</span>
-              <span className="text-blue-600 text-xl">💎</span>
+          {/* Kullanıcı Bahis Göstergesi - Always visible */}
+          {userProfile && (
+            <div className="p-3 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg border border-blue-300 shadow-lg">
+              <div className="flex items-center justify-center space-x-2">
+                <span className="text-xl font-bold text-blue-700">{userProfile.chips.toLocaleString()}</span>
+                <span className="text-blue-600 text-xl">💎</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Expandable Scoreboard Panel */}
+          {showScoreboard && (
+            <div className="absolute top-20 right-4 w-80 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl p-4 shadow-2xl border-2 border-green-500 animate-fade-in z-20">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-white font-bold text-lg">🏆 Skor Tablosu</h3>
+                <button
+                  onClick={() => setShowScoreboard(false)}
+                  className="text-gray-400 hover:text-white transition-colors duration-200"
+                >
+                  <span className="text-lg">✕</span>
+                </button>
+              </div>
+              <Scoreboard
+                scoreboard={(() => {
+                  // Önce oyun sonucu varsa oradan al
+                  if (gameState?.results?.scoreboard && gameState.results.scoreboard.length > 0) {
+                    return gameState.results.scoreboard.map(entry => ({
+                      id: entry.id,
+                      name: entry.name,
+                      netWinnings: entry.netWinnings || 0,
+                      isDealer: entry.isDealer
+                    }));
+                  }
+                  // Sonra sürekli güncellenen scoreboard'dan al
+                  else if (gameState?.scoreboard && gameState.scoreboard.length > 0) {
+                    return gameState.scoreboard;
+                  }
+                  // Yoksa oyuncuların netWinnings değerlerinden oluştur
+                  else if (gameState?.players) {
+                    const scoreboardFromPlayers = gameState.players
+                      .map((player: Player) => ({
+                        id: player.id,
+                        name: player.name,
+                        netWinnings: player.netWinnings || 0,
+                        isDealer: false
+                      }))
+                      .sort((a, b) => b.netWinnings - a.netWinnings);
+
+                    return scoreboardFromPlayers;
+                  }
+                  return [];
+                })()}
+                className="shadow-lg"
+              />
+            </div>
+          )}
+
+          {/* Expandable Sound Control Panel */}
+          {showSoundControl && (
+            <div className="absolute top-32 right-4 w-80 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl p-4 shadow-2xl border-2 border-purple-500 animate-fade-in z-20">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-white font-bold text-lg">🔊 Ses Ayarları</h3>
+                <button
+                  onClick={() => setShowSoundControl(false)}
+                  className="text-gray-400 hover:text-white transition-colors duration-200"
+                >
+                  <span className="text-lg">✕</span>
+                </button>
+              </div>
+              <SoundVolumeControl
+                onVolumeChange={(volume) => {
+                  if (turnSoundRef.current) {
+                    turnSoundRef.current.volume = volume;
+                  }
+                  if (blackjackSoundRef.current) {
+                    blackjackSoundRef.current.volume = volume;
+                  }
+                }}
+                className=""
+              />
+            </div>
+          )}
+
+          {/* Expandable Settings Panel */}
+          {showSettings && settings?.roomOwner === socketId && (
+            <div className="absolute top-44 right-4 w-80 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl p-4 shadow-2xl border-2 border-blue-500 animate-fade-in z-20">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-white font-bold text-lg">⚙️ Oda Ayarları</h3>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-gray-400 hover:text-white transition-colors duration-200"
+                >
+                  <span className="text-lg">✕</span>
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">
+                    Deste Sayısı: <span className="text-blue-400">{settings.deckCount}</span>
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        const newDeckCount = Math.max(1, settings.deckCount - 1);
+                        updateSettings({ deckCount: newDeckCount });
+                      }}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-bold text-sm transition-colors duration-200"
+                    >
+                      -
+                    </button>
+                    <span className="text-white font-bold text-lg min-w-8 text-center">{settings.deckCount}</span>
+                    <button
+                      onClick={() => {
+                        const newDeckCount = Math.min(8, settings.deckCount + 1);
+                        updateSettings({ deckCount: newDeckCount });
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg font-bold text-sm transition-colors duration-200"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Toplam kart: {settings.deckCount} * 52 = {settings.deckCount * 52}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-400 text-xs">
+                    Sadece oda sahibi ayarları değiştirebilir
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto">
@@ -1036,7 +1172,7 @@ export default function BlackjackGame() {
             <div className="absolute bottom-0 right-0 mb-2 mr-4">
               <div className="relative">
                 {/* Alt kartlar (gölge efekti için) */}
-                {[...Array(Math.min(4, Math.max(1, Math.ceil((gameState.deckCount || 52) / 13))))].map((_, index) => (
+                {[...Array(Math.min(4, Math.max(1, settings?.deckCount || 1)))].map((_, index) => (
                   <div
                     key={index}
                     className={`absolute bg-gradient-to-br from-blue-700 via-blue-800 to-blue-900 border border-blue-500 rounded-lg w-16 h-20 shadow-lg transition-all duration-300 ${
@@ -1062,9 +1198,17 @@ export default function BlackjackGame() {
                 </div>
 
                 {/* Kart sayısı göstergesi */}
-                <div className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-lg z-20">
-                  {gameState.deckCount || 52}
+                <div className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-lg z-20">
+                  <div className="text-center leading-tight">
+                    <div>{gameState.deckCount}</div>
+                  </div>
                 </div>
+                {/* Debug info */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="absolute -bottom-8 right-0 text-[8px] text-gray-400 bg-black bg-opacity-50 px-1 rounded">
+                    D:{settings?.deckCount || 1} T:{gameState.totalCards || gameState.settings?.totalCards || (settings?.deckCount || 1) * 52}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -16,25 +16,35 @@ const gameRooms = new Map();
 
 // Blackjack game logic
 class BlackjackGame {
-  constructor(roomId, io) {
+  constructor(roomId, io, settings = {}) {
     this.roomId = roomId;
     this.io = io;
     this.players = new Map();
-    this.deck = this.createDeck();
+    this.settings = {
+      deckCount: settings.deckCount || 1,
+      ...settings
+    };
+    this.deck = this.createDeck(this.settings.deckCount);
     this.gameState = 'waiting';
     this.currentPlayer = null;
     this.dealer = { hand: [], score: 0, hiddenCard: true };
+    this.roomOwner = null; // İlk giren kişi
   }
 
-  createDeck() {
+  createDeck(deckCount = 1) {
     const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
     const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
     const deck = [];
-    for (const suit of suits) {
-      for (const value of values) {
-        deck.push({ suit, value });
+    
+    // Belirtilen sayıda deste oluştur
+    for (let d = 0; d < deckCount; d++) {
+      for (const suit of suits) {
+        for (const value of values) {
+          deck.push({ suit, value });
+        }
       }
     }
+    
     return this.shuffle(deck);
   }
 
@@ -80,6 +90,11 @@ class BlackjackGame {
   }
 
   addPlayer(playerId, name) {
+    // İlk giren kişi room owner olur
+    if (!this.roomOwner) {
+      this.roomOwner = playerId;
+    }
+    
     this.players.set(playerId, {
       id: playerId,
       name,
@@ -104,7 +119,7 @@ class BlackjackGame {
     this.gameState = 'playing';
     this.results = null;
 
-    this.deck = this.createDeck();
+    this.deck = this.createDeck(this.settings.deckCount);
 
     // Copy bet amounts from playerBets to player objects
     if (this.playerBets) {
@@ -870,7 +885,7 @@ class BlackjackGame {
       };
     });
 
-    return {
+    const gameState = {
       roomId: this.roomId,
       players: compatiblePlayers,
       dealer: {
@@ -882,7 +897,53 @@ class BlackjackGame {
       currentPlayer: this.currentPlayer,
       results: this.results || null,
       scoreboard: this.getCurrentScoreboard(), // Her zaman güncel scoreboard gönder
-      deckCount: this.deck.length // Kalan kart sayısı
+      deckCount: this.deck.length, // Kalan kart sayısı
+      totalCards: this.settings.deckCount * 52, // Toplam kart sayısı (deste sayısı × 52)
+      settings: this.getSettings() // Ayarlar bilgilerini ekle
+    };
+    
+    console.log(`📤 Game state for room ${this.roomId}: deckCount=${this.deck.length}, totalCards=${this.settings.deckCount * 52}, settings.deckCount=${this.settings.deckCount}`);
+    return gameState;
+  }
+
+  // Oyuncu ayrıldığında çağrılır
+  removePlayer(playerId) {
+    this.players.delete(playerId);
+    
+    // Eğer ayrılan kişi room owner ise ve oda boş değilse, yeni owner belirle
+    if (this.roomOwner === playerId) {
+      const remainingPlayers = Array.from(this.players.keys());
+      if (remainingPlayers.length > 0) {
+        this.roomOwner = remainingPlayers[0];
+        console.log(`👑 Room owner changed to: ${this.roomOwner}`);
+      } else {
+        this.roomOwner = null;
+        console.log(`🏠 Room is now empty, owner cleared`);
+      }
+    }
+    
+    console.log(`👋 Player ${playerId} removed from room ${this.roomId}`);
+  }
+
+  // Oda ayarlarını güncelle
+  updateSettings(newSettings) {
+    this.settings = { ...this.settings, ...newSettings };
+    
+    // Deste sayısı değiştiyse yeni deste oluştur
+    if (newSettings.deckCount && newSettings.deckCount !== this.settings.deckCount) {
+      this.deck = this.createDeck(newSettings.deckCount);
+      console.log(`🃏 Deck recreated with ${newSettings.deckCount} decks (${this.deck.length} cards)`);
+    }
+    console.log(`⚙️ Room ${this.roomId} settings updated:`, this.settings);
+    console.log(`📊 Total cards should be: ${this.settings.deckCount * 52}`);
+  }
+
+  // Ayarları döndür
+  getSettings() {
+    return {
+      ...this.settings,
+      roomOwner: this.roomOwner,
+      totalCards: this.settings.deckCount * 52 // Toplam kart sayısı (deste sayısı × 52)
     };
   }
 }
@@ -1055,7 +1116,7 @@ app.prepare().then(() => {
       console.log('User disconnected:', socket.id);
       for (const [roomId, game] of gameRooms) {
         const playerWasCurrent = game.currentPlayer === socket.id;
-        game.players.delete(socket.id);
+        game.removePlayer(socket.id);
 
         if (game.players.size === 0) {
           console.log(`🗑️ Deleting empty room: ${roomId}`);
@@ -1073,6 +1134,66 @@ app.prepare().then(() => {
           console.log(`📤 Sending game update after disconnect in room: ${roomId}`);
           io.to(roomId).emit('game-update', game.getGameState());
         }
+      }
+    });
+
+    // Leave room event
+    socket.on('leave-room', (roomId) => {
+      console.log(`👋 Player ${socket.id} leaving room ${roomId}`);
+      const game = gameRooms.get(roomId);
+      if (game) {
+        const playerWasCurrent = game.currentPlayer === socket.id;
+        game.removePlayer(socket.id);
+
+        if (game.players.size === 0) {
+          console.log(`🗑️ Deleting empty room: ${roomId}`);
+          gameRooms.delete(roomId);
+        } else {
+          // Eğer ayrılan oyuncu sıradaysa, sıradaki oyuncuya geç
+          if (playerWasCurrent && game.gameState === 'playing') {
+            const playerIds = Array.from(game.players.keys());
+            if (playerIds.length > 0) {
+              game.currentPlayer = playerIds[0];
+              console.log(`🔄 Current player changed to: ${game.currentPlayer}`);
+            }
+          }
+
+          console.log(`📤 Sending game update after player left room: ${roomId}`);
+          io.to(roomId).emit('game-update', game.getGameState());
+        }
+      }
+      socket.leave(roomId);
+    });
+
+    // Update settings event
+    socket.on('update-settings', (data) => {
+      const { roomId, settings } = data;
+      console.log(`⚙️ Settings update requested for room ${roomId} by ${socket.id}:`, settings);
+      const game = gameRooms.get(roomId);
+      if (game) {
+        // Sadece room owner ayarları değiştirebilir
+        if (game.roomOwner === socket.id) {
+          game.updateSettings(settings);
+          console.log(`✅ Settings updated for room ${roomId}`);
+          io.to(roomId).emit('settings-updated', game.getSettings());
+          io.to(roomId).emit('game-update', game.getGameState());
+        } else {
+          console.log(`❌ Settings update denied - only room owner can change settings`);
+          socket.emit('settings-update-denied', { message: 'Sadece oda sahibi ayarları değiştirebilir.' });
+        }
+      } else {
+        console.log(`❌ Settings update failed - room not found: ${roomId}`);
+      }
+    });
+
+    // Get settings event
+    socket.on('get-settings', (roomId) => {
+      console.log(`📋 Settings requested for room ${roomId} by ${socket.id}`);
+      const game = gameRooms.get(roomId);
+      if (game) {
+        socket.emit('settings-data', game.getSettings());
+      } else {
+        console.log(`❌ Settings request failed - room not found: ${roomId}`);
       }
     });
 

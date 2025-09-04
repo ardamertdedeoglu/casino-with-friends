@@ -10,21 +10,30 @@ class BlackjackGame {
   constructor(roomId) {
     this.roomId = roomId;
     this.players = new Map();
-    this.deck = this.createDeck();
+    this.settings = {
+      deckCount: 1
+    };
+    this.deck = this.createDeck(this.settings.deckCount);
     this.gameState = 'waiting';
     this.currentPlayer = null;
     this.dealer = { hand: [], score: 0, hiddenCard: true };
+    this.roomOwner = null; // İlk giren kişi
   }
 
-  createDeck() {
+  createDeck(deckCount = 1) {
     const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
     const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
     const deck = [];
-    for (const suit of suits) {
-      for (const value of values) {
-        deck.push({ suit, value });
+    
+    // Belirtilen sayıda deste oluştur
+    for (let d = 0; d < deckCount; d++) {
+      for (const suit of suits) {
+        for (const value of values) {
+          deck.push({ suit, value });
+        }
       }
     }
+    
     return this.shuffle(deck);
   }
 
@@ -61,6 +70,11 @@ class BlackjackGame {
   }
 
   addPlayer(playerId, name) {
+    // İlk giren kişi room owner olur
+    if (!this.roomOwner) {
+      this.roomOwner = playerId;
+    }
+    
     this.players.set(playerId, {
       id: playerId,
       name,
@@ -75,7 +89,7 @@ class BlackjackGame {
     this.gameState = 'playing';
     this.results = null;
 
-    this.deck = this.createDeck();
+    this.deck = this.createDeck(this.settings.deckCount);
 
     for (const [playerId, player] of this.players) {
       player.status = 'playing';
@@ -289,7 +303,7 @@ class BlackjackGame {
   }
 
   getGameState() {
-    return {
+    const gameState = {
       roomId: this.roomId,
       players: Array.from(this.players.values()),
       dealer: {
@@ -298,7 +312,53 @@ class BlackjackGame {
       },
       gameState: this.gameState,
       currentPlayer: this.currentPlayer,
-      results: this.results || null
+      results: this.results || null,
+      totalCards: this.settings.deckCount * 52, // Toplam kart sayısı (deste sayısı × 52)
+      settings: this.getSettings() // Ayarlar bilgilerini ekle
+    };
+    
+    console.log(`📤 Game state for room ${this.roomId}: totalCards=${this.settings.deckCount * 52}, settings.deckCount=${this.settings.deckCount}`);
+    return gameState;
+  }
+
+  // Oyuncu ayrıldığında çağrılır
+  removePlayer(playerId) {
+    this.players.delete(playerId);
+    
+    // Eğer ayrılan kişi room owner ise ve oda boş değilse, yeni owner belirle
+    if (this.roomOwner === playerId) {
+      const remainingPlayers = Array.from(this.players.keys());
+      if (remainingPlayers.length > 0) {
+        this.roomOwner = remainingPlayers[0];
+        console.log(`👑 Room owner changed to: ${this.roomOwner}`);
+      } else {
+        this.roomOwner = null;
+        console.log(`🏠 Room is now empty, owner cleared`);
+      }
+    }
+    
+    console.log(`👋 Player ${playerId} removed from room ${this.roomId}`);
+  }
+
+  // Oda ayarlarını güncelle
+  updateSettings(newSettings) {
+    this.settings = { ...this.settings, ...newSettings };
+    
+    // Deste sayısı değiştiyse yeni deste oluştur
+    if (newSettings.deckCount && newSettings.deckCount !== this.settings.deckCount) {
+      this.deck = this.createDeck(newSettings.deckCount);
+      console.log(`🃏 Deck recreated with ${newSettings.deckCount} decks (${this.deck.length} cards)`);
+    }
+    
+    console.log(`⚙️ Room ${this.roomId} settings updated:`, this.settings);
+  }
+
+  // Ayarları döndür
+  getSettings() {
+    return {
+      ...this.settings,
+      roomOwner: this.roomOwner,
+      totalCards: this.settings.deckCount * 52 // Toplam kart sayısı (deste sayısı × 52)
     };
   }
 }
@@ -367,12 +427,59 @@ function initSocketIO(res) {
       socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
         for (const [roomId, game] of gameRooms) {
-          game.players.delete(socket.id);
+          game.removePlayer(socket.id);
           if (game.players.size === 0) {
             gameRooms.delete(roomId);
           } else {
             io.to(roomId).emit('game-update', game.getGameState());
           }
+        }
+      });
+
+      // Leave room event
+      socket.on('leave-room', (roomId) => {
+        console.log(`👋 Player ${socket.id} leaving room ${roomId}`);
+        const game = gameRooms.get(roomId);
+        if (game) {
+          game.removePlayer(socket.id);
+          if (game.players.size === 0) {
+            gameRooms.delete(roomId);
+          } else {
+            io.to(roomId).emit('game-update', game.getGameState());
+          }
+        }
+        socket.leave(roomId);
+      });
+
+      // Update settings event
+      socket.on('update-settings', (data) => {
+        const { roomId, settings } = data;
+        console.log(`⚙️ Settings update requested for room ${roomId} by ${socket.id}:`, settings);
+        const game = gameRooms.get(roomId);
+        if (game) {
+          // Sadece room owner ayarları değiştirebilir
+          if (game.roomOwner === socket.id) {
+            game.updateSettings(settings);
+            console.log(`✅ Settings updated for room ${roomId}`);
+            io.to(roomId).emit('settings-updated', game.getSettings());
+            io.to(roomId).emit('game-update', game.getGameState());
+          } else {
+            console.log(`❌ Settings update denied - only room owner can change settings`);
+            socket.emit('settings-update-denied', { message: 'Sadece oda sahibi ayarları değiştirebilir.' });
+          }
+        } else {
+          console.log(`❌ Settings update failed - room not found: ${roomId}`);
+        }
+      });
+
+      // Get settings event
+      socket.on('get-settings', (roomId) => {
+        console.log(`📋 Settings requested for room ${roomId} by ${socket.id}`);
+        const game = gameRooms.get(roomId);
+        if (game) {
+          socket.emit('settings-data', game.getSettings());
+        } else {
+          console.log(`❌ Settings request failed - room not found: ${roomId}`);
         }
       });
     });

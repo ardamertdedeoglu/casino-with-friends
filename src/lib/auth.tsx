@@ -35,14 +35,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-
-      // Handle email confirmation
-      if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
-        // User has confirmed their email, redirect to home
-        if (typeof window !== 'undefined') {
-          window.location.href = '/';
-        }
-      }
     });
 
     return () => subscription.unsubscribe();

@@ -67,6 +67,7 @@ interface GameState {
   gameState: string;
   currentPlayer: string;
   deckCount?: number; // Destede kalan kart sayısı
+  totalCards?: number; // Toplam kart sayısı
   scoreboard?: Array<{ id: string; name: string; netWinnings: number; isDealer: boolean }>;
   results?: {
     dealerBusted: boolean;
@@ -76,6 +77,13 @@ interface GameState {
     ties: Array<{ id: string; name: string; reason: string }>;
     scoreboard?: Array<{ id: string; name: string; netWinnings: number; isDealer: boolean }>;
   } | null;
+  settings?: GameSettings; // Ayarlar bilgilerini ekle
+}
+
+interface GameSettings {
+  deckCount: number;
+  roomOwner: string | null;
+  totalCards: number;
 }
 
 export const useSocketGame = (
@@ -88,6 +96,7 @@ export const useSocketGame = (
   onBettingCleared?: () => void
 ) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [gameSettings, setGameSettings] = useState<GameSettings | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [socketId, setSocketId] = useState<string | null>(null);
@@ -208,6 +217,22 @@ export const useSocketGame = (
       if (onBettingCleared) {
         onBettingCleared();
       }
+    });
+
+    // Settings event listeners
+    socket.on('settings-updated', (settings: GameSettings) => {
+      console.log('⚙️ Settings updated:', settings);
+      setGameSettings(settings);
+    });
+
+    socket.on('settings-data', (settings: GameSettings) => {
+      console.log('📋 Settings received:', settings);
+      setGameSettings(settings);
+    });
+
+    socket.on('settings-update-denied', (error: { message: string }) => {
+      console.log('❌ Settings update denied:', error.message);
+      setError(error.message);
     });
 
     return () => {
@@ -354,8 +379,39 @@ export const useSocketGame = (
     }
   }, [isConnected, roomId]);
 
+  // Ayarlar iste
+  const requestSettings = useCallback(async () => {
+    if (socketRef.current && isConnected && roomId) {
+      console.log('⚙️ Requesting settings');
+      socketRef.current.emit('get-settings', roomId);
+    } else {
+      console.error('❌ Cannot request settings - socket not connected');
+    }
+  }, [isConnected, roomId]);
+
+  // Ayarları güncelle
+  const updateSettings = useCallback(async (settings: Partial<GameSettings>) => {
+    if (socketRef.current && isConnected && roomId) {
+      console.log('⚙️ Updating settings:', settings);
+      socketRef.current.emit('update-settings', { roomId, settings });
+    } else {
+      console.error('❌ Cannot update settings - socket not connected');
+    }
+  }, [isConnected, roomId]);
+
+  // Odadan ayrıl
+  const leaveRoom = useCallback(async () => {
+    if (socketRef.current && isConnected && roomId) {
+      console.log('👋 Leaving room:', roomId);
+      socketRef.current.emit('leave-room', roomId);
+    } else {
+      console.error('❌ Cannot leave room - socket not connected');
+    }
+  }, [isConnected, roomId]);
+
   return {
     gameState,
+    gameSettings,
     isConnected,
     isLoading,
     socketId,
@@ -369,6 +425,9 @@ export const useSocketGame = (
     changeName,
     sendChatMessage,
     sendBetDecision,
-    requestBettingStatus
+    requestBettingStatus,
+    requestSettings,
+    updateSettings,
+    leaveRoom
   };
 };
