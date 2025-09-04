@@ -104,7 +104,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   } = useBluffGame(roomId, user?.user_metadata?.username || 'Oyuncu');
 
   // Oyuncuları güncelle
-  const updatePlayers = useCallback((playerList: any[]) => {
+  const updatePlayers = useCallback((playerList: { id: string; name: string; chips: number; dice: number[]; isActive: boolean; isConnected: boolean; }[]) => {
     console.log('🎲 Updating players:', playerList.length, 'players, socketId:', socketId);
     const updatedPlayers = playerList.map((p, index) => ({
       id: p.id,
