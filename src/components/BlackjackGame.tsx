@@ -791,6 +791,79 @@ export default function BlackjackGame() {
     );
   };
 
+  // Yeni split el render fonksiyonu - kartlar üst üste yarı yarıya bindirilmiş
+  const renderSplitHand = (hand: { cards: Card[], score: number, bet: number, status: string, isBlackjack: boolean, hasDoubledDown: boolean }, handIndex: number, isActive: boolean) => {
+    const cardWidth = 60; // Kart genişliği
+    const cardHeight = 80; // Kart yüksekliği
+    const overlapOffset = cardWidth * 0.4; // Kartların üst üste bindirme miktarı (yarı yarıya)
+
+    return (
+      <div className={`relative inline-block ${isActive ? 'ring-2 ring-yellow-400 rounded-lg' : ''}`}>
+        {/* Kartlar üst üste */}
+        <div className="relative" style={{ width: cardWidth + (hand.cards.length - 1) * overlapOffset, height: cardHeight }}>
+          {hand.cards.map((card: Card, cardIndex: number) => {
+            const zIndex = cardIndex + 1;
+            const leftOffset = cardIndex * overlapOffset;
+
+            return (
+              <div
+                key={cardIndex}
+                className="absolute bg-white border-2 border-gray-300 rounded-lg p-3 text-center shadow-lg transition-all duration-300 cursor-pointer hover:transform hover:scale-150 hover:z-[1000] hover:shadow-2xl hover:-translate-y-4 hover:border-4 hover:border-blue-500"
+                style={{
+                  width: cardWidth,
+                  height: cardHeight,
+                  left: leftOffset,
+                  zIndex: zIndex,
+                  top: 0,
+                  transformOrigin: 'center center'
+                }}
+              >
+                <div className="text-xl font-bold text-gray-800">{card.value}</div>
+                <div className={`text-2xl ${
+                  card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-black'
+                }`}>
+                  {card.suit === 'hearts' ? '♥' :
+                   card.suit === 'diamonds' ? '♦' :
+                   card.suit === 'clubs' ? '♣' : '♠'}
+                </div>
+
+                {/* Blackjack etiketi */}
+                {hand.isBlackjack && cardIndex === hand.cards.length - 1 && (
+                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
+                    BJ!
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* El bilgilerini kartların altına yerleştir */}
+        <div className="text-center mt-2">
+          <div className="text-xs font-medium text-gray-600">
+            El {handIndex + 1} • Skor: {hand.score} • Bahis: {hand.bet} 💎
+          </div>
+          <div className={`text-xs font-medium px-2 py-1 rounded mt-1 inline-block ${
+            hand.status === 'busted' ? 'bg-red-100 text-red-700' :
+            hand.status === 'stood' ? 'bg-blue-100 text-blue-700' :
+            hand.isBlackjack ? 'bg-yellow-100 text-yellow-700' :
+            'bg-green-100 text-green-700'
+          }`}>
+            {hand.status === 'playing' && hand.isBlackjack && '👑 BLACKJACK!'}
+            {hand.status === 'playing' && !hand.isBlackjack && '🃏 Oynuyor'}
+            {hand.status === 'stood' && hand.isBlackjack && '🎉 BJ & Durdu'}
+            {hand.status === 'stood' && !hand.isBlackjack && (
+              hand.hasDoubledDown ? '🎰 Double & Durdu' : '✋ Durdu'
+            )}
+            {hand.status === 'busted' && (
+              hand.hasDoubledDown ? '🎰💥 Double & Battı' : '💥 Battı'
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCardBack = () => {
     return (
       <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 border-2 border-blue-400 rounded-lg p-3 m-2 text-center shadow-lg transform hover:scale-105 transition-transform duration-200 min-w-[60px] min-h-[80px] flex flex-col justify-center items-center">
@@ -1325,64 +1398,17 @@ export default function BlackjackGame() {
                 )}
                 {/* El/Eller Gösterimi */}
                 {player.hasSplit && player.hands ? (
-                  // Split yapılmış oyuncu - iki el yan yana göster
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {player.hands.map((hand, handIndex) => (
-                        <div key={handIndex} className={`p-4 rounded-lg border-2 ${
-                          isMyTurn && player.id === socketId && player.currentHandIndex === handIndex 
-                            ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-200' 
-                            : 'border-gray-300 bg-gray-50'
-                        }`}>
-                          <div className="text-center mb-2">
-                            <h4 className="font-bold text-sm text-gray-700">
-                              El {handIndex + 1} 
-                              {isMyTurn && player.id === socketId && player.currentHandIndex === handIndex && (
-                                <span className="text-yellow-600 ml-1">🎯</span>
-                              )}
-                            </h4>
-                            <p className="text-sm text-gray-600">
-                              Skor: <span className="font-bold">{hand.score}</span> | 
-                              Bahis: <span className="font-bold">{hand.bet.toLocaleString()} 💎</span>
-                            </p>
-                          </div>
-                          
-                          {/* El kartları */}
-                          <div className="flex justify-center flex-wrap mb-2">
-                            {hand.cards.map((card: Card, cardIndex: number) => (
-                              <div key={cardIndex} className="relative">
-                                {renderCard(card, cardIndex, false)}
-                                {hand.isBlackjack && cardIndex === hand.cards.length - 1 && (
-                                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-full shadow-lg border-2 border-yellow-300 animate-pulse">
-                                    BJ!
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          
-                          {/* El durumu */}
-                          <div className="text-center text-xs">
-                            <span className={`font-medium px-2 py-1 rounded ${
-                              hand.status === 'busted' ? 'bg-red-100 text-red-700' :
-                              hand.status === 'stood' ? 'bg-blue-100 text-blue-700' :
-                              hand.isBlackjack ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-green-100 text-green-700'
-                            }`}>
-                              {hand.status === 'playing' && hand.isBlackjack && '👑 BLACKJACK!'}
-                              {hand.status === 'playing' && !hand.isBlackjack && '🃏 Oynuyor'}
-                              {hand.status === 'stood' && hand.isBlackjack && '🎉 BJ & Durdu'}
-                              {hand.status === 'stood' && !hand.isBlackjack && (
-                                hand.hasDoubledDown ? '🎰 Double & Durdu' : '✋ Durdu'
-                              )}
-                              {hand.status === 'busted' && (
-                                hand.hasDoubledDown ? '🎰💥 Double & Battı' : '💥 Battı'
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                  // Split yapılmış oyuncu - yeni kompakt UI
+                  <div className="flex justify-center items-start space-x-4 mb-4">
+                    {player.hands.map((hand, handIndex) => (
+                      <div key={handIndex} className="flex flex-col items-center">
+                        {renderSplitHand(
+                          hand,
+                          handIndex,
+                          isMyTurn && player.id === socketId && player.currentHandIndex === handIndex
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   // Normal oyuncu - tek el göster
@@ -1871,7 +1897,7 @@ export default function BlackjackGame() {
               {canInsurance(currentPlayerData) && (
                 <button
                   onClick={() => insurance(getMaxInsurance(currentPlayerData))}
-                  className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-700 hover:to-yellow-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-yellow-500 flex items-center space-x-2"
+                  className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-6 py-3 rounded-lg font-bold text-sm hover:from-yellow-700 hover:to-yellow-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-yellow-500 flex items-center space-x-2"
                 >
                   <span className="text-2xl">🛡️</span>
                   <span>INSURANCE</span>
@@ -1882,7 +1908,7 @@ export default function BlackjackGame() {
               {canSplit(currentPlayerData) && (
                 <button
                   onClick={split}
-                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-green-500 flex items-center space-x-2"
+                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-xl font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-green-500 flex items-center space-x-2"
                 >
                   <span className="text-2xl">🃏🃏</span>
                   <span>SPLIT</span>
