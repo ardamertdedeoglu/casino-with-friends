@@ -13,7 +13,7 @@ import Scoreboard from './Scoreboard';
 interface GameRoom {
   id: string;
   game_type: string;
-  house_chips: number;
+  house_chips?: number;
   status: string;
   max_players: number;
   current_round: number;
@@ -31,6 +31,7 @@ interface Player {
   dice: number[];
   isActive: boolean;
   position: number;
+  isConnected: boolean;
 }
 
 interface Bet {
@@ -40,6 +41,50 @@ interface Bet {
   quantity: number;
   value: number;
   isBluff: boolean;
+}
+
+interface BluffGameData {
+  gameRoom: GameRoom;
+  players: { id: string; name: string; chips: number; dice: number[]; isActive: boolean; isConnected: boolean; }[];
+  currentPlayer: string;
+  currentBet: Bet | null;
+  phase: 'waiting' | 'betting' | 'playing' | 'finished';
+  roundNumber: number;
+  myDice?: number[];
+}
+
+interface GameData {
+  gameRoom: GameRoom;
+  players: Player[];
+  currentPlayer: string;
+  currentBet: Bet | null;
+  phase: 'waiting' | 'betting' | 'playing' | 'finished';
+  roundNumber: number;
+  myDice?: number[];
+}
+
+interface PlayerJoinedData {
+  name: string;
+}
+
+interface PlayerLeftData {
+  name: string;
+}
+
+interface BetPlacedData {
+  playerName: string;
+  quantity: number;
+  value: number;
+  isBluff: boolean;
+}
+
+interface ChallengeResultData {
+  message: string;
+}
+
+interface RoundEndData {
+  winner: string;
+  loser: string;
 }
 
 export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGameProps) {
@@ -52,7 +97,6 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   const [myDice, setMyDice] = useState<number[]>([]);
   const [roundNumber, setRoundNumber] = useState(1);
   const [message, setMessage] = useState('');
-  const [copySuccess, setCopySuccess] = useState(false);
 
   const { user } = useAuth();
   const { userProfile } = useVirtualCurrency();
@@ -80,7 +124,8 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
       chips: p.chips,
       dice: socketId && p.id === socketId ? myDice : [], // Sadece kendi zarlarını göster
       isActive: p.id === currentPlayer,
-      position: index
+      position: index,
+      isConnected: p.isConnected
     }));
     console.log('🎲 Setting players state:', updatedPlayers.length, 'players');
     setPlayers(updatedPlayers);
@@ -95,7 +140,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   // Oyun güncellemelerini dinle
   useEffect(() => {
     console.log('🎲 Setting up game callbacks, socketId:', socketId);
-    onGameUpdate((data: any) => {
+    onGameUpdate((data: BluffGameData) => {
       console.log('🎲 Game update received:', data);
       console.log('🎲 Players in data:', data.players?.length || 0);
       setGameRoom(data.gameRoom);
@@ -107,34 +152,29 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
       if (data.myDice) setMyDice(data.myDice);
     });
 
-    onPlayerJoined((player: any) => {
+    onPlayerJoined((player: PlayerJoinedData) => {
       setMessage(`${player.name} odaya katıldı`);
       setTimeout(() => setMessage(''), 3000);
     });
 
-    onPlayerLeft((player: any) => {
-      setMessage(`${player.name} odadan ayrıldı`);
-      setTimeout(() => setMessage(''), 3000);
-    });
-
-    onBetPlaced((bet: any) => {
-      setCurrentBet(bet);
+    onBetPlaced((bet: BetPlacedData) => {
+      setCurrentBet(bet as Bet);
       setMessage(`${bet.playerName}: ${bet.quantity} tane ${bet.value}${bet.isBluff ? ' (Blöf!)' : ''}`);
     });
 
-    onChallengeResult((result: any) => {
+    onChallengeResult((result: ChallengeResultData) => {
       setMessage(result.message);
       setTimeout(() => setMessage(''), 5000);
     });
 
-    onRoundEnd((result: any) => {
+    onRoundEnd((result: RoundEndData) => {
       setMessage(`Tur bitti! ${result.winner} kazandı, ${result.loser} kaybetti`);
       setTimeout(() => setMessage(''), 5000);
     });
   }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onRoundEnd, updatePlayers]);
 
   // Bahis yerleştirme
-  const handleBetPlaced = (amount: number, sessionId: string) => {
+  const handleBetPlaced = (_amount: number, _sessionId: string) => {
     setShowBetPlacement(false);
     setGamePhase('playing');
     // İlk bahis için gerekli işlemler
@@ -144,13 +184,11 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   const copyRoomId = async () => {
     try {
       await navigator.clipboard.writeText(roomId);
-      setCopySuccess(true);
       setMessage('Oda ID kopyalandı! 📋');
       setTimeout(() => {
-        setCopySuccess(false);
         setMessage('');
       }, 3000);
-    } catch (err) {
+    } catch {
       setMessage('Kopyalama başarısız oldu');
       setTimeout(() => setMessage(''), 3000);
     }

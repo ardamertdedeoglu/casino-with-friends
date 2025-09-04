@@ -4,10 +4,30 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface BluffGameData {
-  gameRoom: any;
-  players: any[];
+  gameRoom: {
+    id: string;
+    game_type: string;
+    status: string;
+    current_round: number;
+    max_players: number;
+  };
+  players: {
+    id: string;
+    name: string;
+    chips: number;
+    dice: number[];
+    isActive: boolean;
+    isConnected: boolean;
+  }[];
   currentPlayer: string;
-  currentBet: any;
+  currentBet: {
+    id: string;
+    playerId: string;
+    playerName: string;
+    quantity: number;
+    value: number;
+    isBluff: boolean;
+  } | null;
   phase: 'waiting' | 'betting' | 'playing' | 'finished';
   roundNumber: number;
   myDice?: number[];
@@ -15,10 +35,13 @@ interface BluffGameData {
 
 interface BluffAction {
   type: 'raise' | 'bluff' | 'challenge';
-  data?: any;
+  data?: {
+    quantity?: number;
+    value?: number;
+  };
 }
 
-export function useBluffGame(roomId: string, playerName: string, enableChat: boolean = false, onChatMessageCallback?: (message: any) => void) {
+export function useBluffGame(roomId: string, playerName: string, enableChat: boolean = false) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [socketId, setSocketId] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
@@ -136,27 +159,27 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
     onGameUpdateRef.current = callback;
   }, []);
 
-  const onPlayerJoined = useCallback((callback: (player: any) => void) => {
+  const onPlayerJoined = useCallback((callback: (player: { name: string }) => void) => {
     onPlayerJoinedRef.current = callback;
   }, []);
 
-  const onPlayerLeft = useCallback((callback: (player: any) => void) => {
+  const onPlayerLeft = useCallback((callback: (player: { name: string }) => void) => {
     onPlayerLeftRef.current = callback;
   }, []);
 
-  const onBetPlaced = useCallback((callback: (bet: any) => void) => {
+  const onBetPlaced = useCallback((callback: (bet: { playerName: string; quantity: number; value: number; isBluff: boolean }) => void) => {
     onBetPlacedRef.current = callback;
   }, []);
 
-  const onChallengeResult = useCallback((callback: (result: any) => void) => {
+  const onChallengeResult = useCallback((callback: (result: { message: string }) => void) => {
     onChallengeResultRef.current = callback;
   }, []);
 
-  const onRoundEnd = useCallback((callback: (result: any) => void) => {
+  const onRoundEnd = useCallback((callback: (result: { winner: string; loser: string }) => void) => {
     onRoundEndRef.current = callback;
   }, []);
 
-  const onChatMessage = useCallback((callback: (message: any) => void) => {
+  const onChatMessage = useCallback((callback: (message: { id: string; name: string; message: string; timestamp: number }) => void) => {
     onChatMessageRef.current = callback;
   }, []);
 

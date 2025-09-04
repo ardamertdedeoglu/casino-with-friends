@@ -63,7 +63,7 @@ export default function SignUpForm({ onSuccess, onClose, onSwitchToSignIn }: Sig
         setIsSuccess(true);
         setMessage('Kayıt başarılı! Lütfen e-posta adresinizi kontrol edin ve hesabınızı doğrulayın.');
       }
-    } catch (error) {
+    } catch {
       setMessage('Bir hata oluştu. Lütfen tekrar deneyin.');
     }
 

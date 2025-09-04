@@ -42,9 +42,10 @@ export default function SignInForm({ onSuccess, onClose, onSwitchToSignUp }: Sig
         }
       } else {
         // Başarılı giriş - modal kapanacak
-        onSuccess?.() || onClose?.();
+        if (onSuccess) onSuccess();
+        if (onClose) onClose();
       }
-    } catch (error) {
+    } catch {
       setMessage('Bir hata oluştu. Lütfen tekrar deneyin.');
     }
 

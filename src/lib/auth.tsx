@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? `${window.location.protocol}//${window.location.host}`
         : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
