@@ -111,6 +111,14 @@ export default function BlackjackGame() {
   // Tüm oyuncuların bahis durumlarını takip et
   const [playerBets, setPlayerBets] = useState<{[playerId: string]: {decision: 'bet' | 'no-bet' | null, amount: number}}>({});
 
+  // Yeni tur sayacı için state'ler
+  const [countdown, setCountdown] = useState<number>(5);
+  const [countdownActive, setCountdownActive] = useState<boolean>(false);
+
+  // Oyuncu sırası countdown'u için state'ler
+  const [turnCountdown, setTurnCountdown] = useState<number>(15);
+  const [turnCountdownActive, setTurnCountdownActive] = useState<boolean>(false);
+
   // Animasyon state'leri
   const [isCardDealing, setIsCardDealing] = useState(false);
   const [lastDeckCount, setLastDeckCount] = useState(52);
@@ -346,6 +354,78 @@ export default function BlackjackGame() {
     }
   }, [gameState?.players]);
 
+  // Yeni tur countdown'u
+  useEffect(() => {
+    if (gameState?.gameState === 'finished' && gameState.results && !countdownActive) {
+      console.log('🎯 Starting countdown for new round');
+      setCountdown(5);
+      setCountdownActive(true);
+    } else if (gameState?.gameState !== 'finished') {
+      setCountdownActive(false);
+    }
+  }, [gameState?.gameState, gameState?.results, countdownActive]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (countdownActive && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (countdownActive && countdown === 0) {
+      console.log('🎯 Countdown finished, starting new round automatically');
+      setCountdownActive(false);
+      handleNewRound();
+    }
+  }, [countdown, countdownActive]);
+
+  // Oyuncu sırası countdown'u - başlatma
+  useEffect(() => {
+    if (gameState?.gameState === 'playing' && gameState.currentPlayer === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack) {
+      console.log('⏰ Starting turn countdown for current player');
+      setTurnCountdown(15);
+      setTurnCountdownActive(true);
+    } else if (gameState?.currentPlayer !== socketId || gameState?.gameState !== 'playing') {
+      setTurnCountdownActive(false);
+    }
+  }, [gameState?.gameState, gameState?.currentPlayer, socketId, currentPlayerData?.status, currentPlayerData?.isBlackjack]);
+
+  // Oyuncu sırası countdown'u - timer
+  useEffect(() => {
+    if (turnCountdownActive && turnCountdown > 0) {
+      const timer = setTimeout(() => {
+        setTurnCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (turnCountdownActive && turnCountdown === 0) {
+      console.log('⏰ Turn countdown finished, auto-standing for all hands');
+      setTurnCountdownActive(false);
+      handleAutoStand();
+    }
+  }, [turnCountdown, turnCountdownActive]);
+
+  const handleAutoStand = async () => {
+    if (roomId && socketId && currentPlayerData) {
+      console.log('⏰ Auto-standing due to timeout');
+
+      // Split edilmiş eller varsa, tüm eller için stand at
+      if (currentPlayerData.hasSplit && currentPlayerData.hands) {
+        // Tüm eller için stand at (split edilmiş oyunlarda)
+        for (let i = 0; i < currentPlayerData.hands.length; i++) {
+          if (currentPlayerData.hands[i].status === 'playing') {
+            console.log(`⏰ Auto-standing hand ${i + 1}`);
+            await makeMove('stand', socketId);
+            // Kısa bir bekleme ile diğer eli de stand ettir
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+      } else {
+        // Normal oyun için stand at
+        await makeMove('stand', socketId);
+      }
+    }
+  };
+
   const handleLeaveGame = async () => {
     if (playerId && roomId) {
       await leaveGame(playerId);
@@ -560,6 +640,10 @@ export default function BlackjackGame() {
     if (roomId && socketId) {
       console.log('🎯 Hit button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
       console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
+      
+      // Countdown'u durdur
+      setTurnCountdownActive(false);
+      
       await makeMove('hit', socketId);
     } else {
       console.log('❌ Hit failed - roomId:', roomId, 'socketId:', socketId);
@@ -570,6 +654,10 @@ export default function BlackjackGame() {
     if (roomId && socketId) {
       console.log('🛑 Stand button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
       console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
+      
+      // Countdown'u durdur
+      setTurnCountdownActive(false);
+      
       await makeMove('stand', socketId);
     } else {
       console.log('❌ Stand failed - roomId:', roomId, 'socketId:', socketId);
@@ -580,6 +668,10 @@ export default function BlackjackGame() {
     if (roomId && socketId) {
       console.log('🎰 Double down button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
       console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
+      
+      // Countdown'u durdur
+      setTurnCountdownActive(false);
+      
       await makeMove('double-down', socketId);
     } else {
       console.log('❌ Double down failed - roomId:', roomId, 'socketId:', socketId);
@@ -590,6 +682,10 @@ export default function BlackjackGame() {
     if (roomId && socketId) {
       console.log('🃏 Split button clicked, socketId:', socketId, 'isMyTurn:', isMyTurn);
       console.log('Current gameState.currentPlayer:', gameState?.currentPlayer);
+      
+      // Countdown'u durdur
+      setTurnCountdownActive(false);
+      
       await makeMove('split', socketId);
     } else {
       console.log('❌ Split failed - roomId:', roomId, 'socketId:', socketId);
@@ -599,6 +695,10 @@ export default function BlackjackGame() {
   const insurance = async (amount: number) => {
     if (roomId && socketId) {
       console.log('🛡️ Insurance button clicked, socketId:', socketId, 'amount:', amount);
+      
+      // Countdown'u durdur
+      setTurnCountdownActive(false);
+      
       await makeMove('insurance', socketId, amount);
     } else {
       console.log('❌ Insurance failed - roomId:', roomId, 'socketId:', socketId);
@@ -847,31 +947,37 @@ export default function BlackjackGame() {
       </div>
 
       <div className="max-w-6xl mx-auto">
-        {/* Back to Menu Button */}
-        <div className="mb-4 flex gap-3">
-          <Link
-            href="/"
-            onClick={handleLeaveGame}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
-          >
-            <span className="text-lg mr-2">⬅️</span>
-            ANA MENÜ
-          </Link>
-          <button
-            onClick={handleResetRoom}
-            className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
-          >
-            <span className="text-lg mr-2">🔄</span>
-            SIFIRLA
-          </button>
-        </div>
-
         {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-5xl font-bold text-yellow-400 mb-2 drop-shadow-lg">🎰 BLACKJACK</h1>
-          <div className="bg-black bg-opacity-50 rounded-lg p-4 inline-block">
-            <p className="text-yellow-200 font-semibold">Oda: <span className="text-white">{gameState.roomId}</span></p>
-            <p className="text-yellow-200 font-semibold">Durum: <span className="text-white capitalize">{gameState.gameState}</span></p>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <Link
+              href="/"
+              onClick={handleLeaveGame}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
+            >
+              <span className="text-lg mr-2">⬅️</span>
+              ANA MENÜ
+            </Link>
+            <button
+              onClick={handleResetRoom}
+              className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-full font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center inline-flex"
+            >
+              <span className="text-lg mr-2">🔄</span>
+              SIFIRLA
+            </button>
+          </div>
+
+          <h1 className="text-4xl font-bold text-yellow-400 drop-shadow-lg">🎰 BLACKJACK</h1>
+
+          <div className="flex items-center space-x-6 text-yellow-200 font-semibold">
+            <div className="flex items-center space-x-2">
+              <span className="text-yellow-300">🏠 Oda:</span>
+              <span className="text-white font-bold">{gameState.roomId}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-yellow-300">📊 Durum:</span>
+              <span className="text-white font-bold capitalize">{gameState.gameState}</span>
+            </div>
           </div>
         </div>
 
@@ -894,7 +1000,8 @@ export default function BlackjackGame() {
             </div>
             
             {/* Sağ taraf - Boş alan (dengeleme için) */}
-            <div className="lg:flex-1"></div>
+            <div className="lg:flex-1">
+            </div>
           </div>
           
           <div className="flex justify-center flex-wrap relative">
@@ -922,6 +1029,8 @@ export default function BlackjackGame() {
             {gameState.dealer.isBlackjack && !gameState.dealer.hiddenCard && (
               <p className="text-red-400 text-xl font-bold animate-pulse">🃏 BLACKJACK! 🃏</p>
             )}
+
+            
 
             {/* Kart Destesi - sağ altta, daha büyük */}
             <div className="absolute bottom-0 right-0 mb-2 mr-4">
@@ -1023,8 +1132,8 @@ export default function BlackjackGame() {
                   ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 via-yellow-100 to-yellow-200 shadow-yellow-200'
                   : gameState.gameState === 'finished' as string && resultStyle
                     ? resultStyle
-                    : isMyTurn && player.id === socketId
-                      ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100'
+                    : gameState.currentPlayer === player.id && gameState.gameState === 'playing'
+                      ? 'border-yellow-500 ring-4 ring-yellow-300 bg-gradient-to-br from-yellow-50 to-yellow-100 animate-turn-glow'
                       : 'border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200'
               }`}>
                 <div className="flex items-center justify-between mb-3">
@@ -1032,7 +1141,6 @@ export default function BlackjackGame() {
                     {player.name}
                     {player.id === socketId && <span className="text-blue-600 ml-2">(Sen)</span>}
                     {player.isBlackjack && <span className="text-yellow-600 ml-2 text-lg animate-pulse">👑</span>}
-                    {isMyTurn && player.id === socketId && <span className="text-yellow-600 ml-2">🎯</span>}
                     {resultIcon && <span className="ml-2 text-2xl">{resultIcon}</span>}
                   </h3>
                   <div className="flex items-center space-x-2">
@@ -1042,7 +1150,7 @@ export default function BlackjackGame() {
                     ) : (
                       // Split oyuncu - toplam skor gösterimi
                       <p className="text-gray-700 font-semibold">
-                        Eller: <span className="text-lg text-gray-900">{player.hands?.length || 0}</span> | 
+                        Eller: <span className="text-lg text-gray-900">{player.hands?.length || 0}</span> |
                         Aktif: <span className="text-lg text-yellow-700">El {(player.currentHandIndex || 0) + 1}</span>
                       </p>
                     )}
@@ -1051,6 +1159,26 @@ export default function BlackjackGame() {
                     )}
                   </div>
                 </div>
+
+                {/* Oyuncu Sırası Countdown - sadece kendi kartında ve sırası olduğunda */}
+                {player.id === socketId && turnCountdownActive && isMyTurn && (
+                  <div className="flex justify-center mb-3">
+                    <div className={`px-3 py-2 rounded-lg shadow-md border animate-pulse ${
+                      turnCountdown <= 5
+                        ? 'bg-gradient-to-r from-red-600 to-red-800 border-red-500 text-white'
+                        : 'bg-gradient-to-r from-yellow-600 to-orange-600 border-yellow-500 text-white'
+                    }`}>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm">⏰</span>
+                        <span className={`font-bold ${
+                          turnCountdown <= 5 ? 'text-lg animate-bounce' : 'text-base'
+                        }`}>
+                          {turnCountdown}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* El/Eller Gösterimi */}
                 {player.hasSplit && player.hands ? (
                   // Split yapılmış oyuncu - iki el yan yana göster
@@ -1128,70 +1256,12 @@ export default function BlackjackGame() {
                   </div>
                 )}
                 <div className="text-center space-y-1">
-                  {/* Hit/Stand/Double Down/Split buttons for current player */}
-                  {isMyTurn && player.id === socketId && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
-                    <div className="space-y-2 mb-2">
-                      {/* Temel butonlar - Hit & Stand */}
-                      <div className="flex items-center justify-center space-x-3">
-                        <button
-                          onClick={hit}
-                          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-blue-500 flex items-center space-x-2"
-                        >
-                          <span className="text-lg">🃏</span>
-                          <span>HIT</span>
-                        </button>
-                        <button
-                          onClick={stand}
-                          className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-red-700 hover:to-red-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-red-500 flex items-center space-x-2"
-                        >
-                          <span className="text-lg">✋</span>
-                          <span>STAND</span>
-                        </button>
-                      </div>
-                      
-                      {/* Özel butonlar - Double Down, Split & Insurance */}
-                      {(player.hand.length === 2 && !player.hasDoubledDown) || canSplit(player) || canInsurance(player) ? (
-                        <div className="flex items-center justify-center space-x-3">
-                          {/* Double Down button - only show if player has exactly 2 cards */}
-                          {player.hand.length === 2 && !player.hasDoubledDown && (
-                            <button
-                              onClick={doubleDown}
-                              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-purple-500 flex items-center space-x-2"
-                            >
-                              <span className="text-lg">🎰</span>
-                              <span>DOUBLE</span>
-                            </button>
-                          )}
-                          {/* Split button - only show if player can split */}
-                          {canSplit(player) && (
-                            <button
-                              onClick={split}
-                              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-green-500 flex items-center space-x-2"
-                            >
-                              <span className="text-lg">🃏🃏</span>
-                              <span>SPLIT</span>
-                            </button>
-                          )}
-                          {/* Insurance button - only show if dealer shows Ace and conditions are met */}
-                          {canInsurance(player) && (
-                            <button
-                              onClick={() => insurance(getMaxInsurance(player))}
-                              className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-700 hover:to-yellow-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-yellow-500 flex items-center space-x-2"
-                            >
-                              <span className="text-lg">🛡️</span>
-                              <span>INSURANCE</span>
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
                   {/* Bahis Bilgileri - Herkes için görünür */}
                   <div className="mt-3 p-3 bg-gradient-to-r from-purple-100 to-blue-100 rounded-lg border border-purple-300 shadow-md">
                     {/* Bahis Durumu */}
                     <div className="flex items-center justify-center mb-2">
                       <div className="flex items-center space-x-2">
-                        <span className="text-purple-700 font-bold">💰 Aktif Bahis:</span>
+                        <span className="text-purple-700 font-bold text-lg">💰 Aktif Bahis:</span>
                         {gameState?.gameState === 'playing' ? (
                           // Oyun sırasında gerçek bet miktarını göster
                           player.bet > 0 ? (
@@ -1540,38 +1610,164 @@ export default function BlackjackGame() {
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  {gameState.gameState === 'finished' as string && (
-                    <button
-                      onClick={handleNewRound}
-                      disabled={isLoading}
-                      className="bg-gradient-to-r from-green-600 to-green-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-green-700 hover:to-green-800 disabled:from-gray-500 disabled:to-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-green-500 flex items-center justify-center"
-                    >
-                      <span className="text-2xl mr-3">🎯</span>
-                      {isLoading ? 'Hazırlanıyor...' : 'YENİ TUR'}
-                    </button>
+                {/* Action Buttons - Countdown */}
+                <div className="flex flex-col gap-4 justify-center items-center">
+                  {countdownActive ? (
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-black mb-2 animate-pulse">
+                        ⏰ Yeni tur {countdown} saniye içinde başlayacaktır...
+                      </div>
+                      <div className="text-6xl font-bold text-black animate-bounce">
+                        {countdown}
+                      </div>
+                      <div className="text-sm text-gray-700 mt-2">
+                        Sonuçları inceleyin, otomatik olarak yeni tur başlayacak
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-black mb-4">
+                        🎯 Yeni tur hazırlanıyor...
+                      </div>
+                    </div>
                   )}
-                  <Link
-                    href="/"
-                    onClick={handleLeaveGame}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-blue-700 hover:to-blue-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-blue-500 flex items-center justify-center"
-                  >
-                    <span className="text-2xl mr-3">⬅️</span>
-                    ANA MENÜ
-                  </Link>
-                  <button
-                    onClick={handleResetRoom}
-                    className="bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:from-red-700 hover:to-red-800 shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all duration-300 border-4 border-red-500 flex items-center justify-center"
-                  >
-                    <span className="text-2xl mr-3">🔄</span>
-                    ODAYI SIFIRLA
-                  </button>
                 </div>
               </div>
             </div>
         )}
       </div>
+
+      {/* Hidden audio element for turn notification */}
+      <audio
+        ref={turnSoundRef}
+        src="/guitar-riff.wav"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden audio element for blackjack sound */}
+      <audio
+        ref={blackjackSoundRef}
+        src="/blackjack.wav"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+
+      {/* Bahis Modal */}
+      {showBetModal && (
+        <div 
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.9) 100%)'
+          }}
+        >
+          <BetPlacement
+            roomId={roomId}
+            gameType="blackjack"
+            onBetPlaced={handleBetPlaced}
+            onNoBet={handleNoBet}
+            onClose={() => setShowBetModal(false)}
+            minBet={10}
+            maxBet={1000}
+          />
+        </div>
+      )}
+
+      {/* Hidden audio element for turn notification */}
+      <audio
+        ref={turnSoundRef}
+        src="/guitar-riff.wav"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden audio element for blackjack sound */}
+      <audio
+        ref={blackjackSoundRef}
+        src="/blackjack.wav"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+
+      {/* Bahis Modal */}
+      {showBetModal && (
+        <div 
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.9) 100%)'
+          }}
+        >
+          <BetPlacement
+            roomId={roomId}
+            gameType="blackjack"
+            onBetPlaced={handleBetPlaced}
+            onNoBet={handleNoBet}
+            onClose={() => setShowBetModal(false)}
+            minBet={10}
+            maxBet={1000}
+          />
+        </div>
+      )}
+
+      {/* Fixed Game Controls - Bottom of Screen */}
+      {gameState?.gameState === 'playing' && isMyTurn && currentPlayerData?.status === 'playing' && !currentPlayerData?.isBlackjack && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-4xl px-4">
+          <div className="bg-gradient-to-t from-black via-gray-900 to-black bg-opacity-90 backdrop-blur-sm rounded-2xl p-4 shadow-2xl border-4 border-yellow-400">
+            {/* Single row layout for all buttons */}
+            <div className="flex items-center justify-center space-x-3">
+              {/* Hit button - always on the left */}
+              <button
+                onClick={hit}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-blue-500 flex items-center space-x-3 min-w-32"
+              >
+                <span className="text-2xl">🃏</span>
+                <span>HIT</span>
+              </button>
+              {/* Insurance button - left of double if available */}
+              {canInsurance(currentPlayerData) && (
+                <button
+                  onClick={() => insurance(getMaxInsurance(currentPlayerData))}
+                  className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-yellow-700 hover:to-yellow-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-yellow-500 flex items-center space-x-2"
+                >
+                  <span className="text-2xl">🛡️</span>
+                  <span>INSURANCE</span>
+                </button>
+              )}
+
+              {/* Split button - left of double if available */}
+              {canSplit(currentPlayerData) && (
+                <button
+                  onClick={split}
+                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 border border-green-500 flex items-center space-x-2"
+                >
+                  <span className="text-2xl">🃏🃏</span>
+                  <span>SPLIT</span>
+                </button>
+              )}
+
+              {/* Double button - always in center if available */}
+              {currentPlayerData.hand.length === 2 && !currentPlayerData.hasDoubledDown && (
+                <button
+                  onClick={doubleDown}
+                  className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-purple-800 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-purple-500 flex items-center space-x-3 min-w-32"
+                >
+                  <span className="text-2xl">🎰</span>
+                  <span>DOUBLE</span>
+                </button>
+              )}
+
+              {/* Stand button - always on the right */}
+              <button
+                onClick={stand}
+                className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl font-bold text-lg hover:from-red-700 hover:to-red-800 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 border-2 border-red-500 flex items-center space-x-3 min-w-32"
+              >
+                <span className="text-2xl">✋</span>
+                <span>STAND</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hidden audio element for turn notification */}
       <audio
