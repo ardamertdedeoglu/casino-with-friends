@@ -33,14 +33,6 @@ interface BluffGameData {
   myDice?: number[];
 }
 
-interface BluffAction {
-  type: 'raise' | 'bluff' | 'challenge';
-  data?: {
-    quantity?: number;
-    value?: number;
-  };
-}
-
 export function useBluffGame(roomId: string, playerName: string, enableChat: boolean = false) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [socketId, setSocketId] = useState<string>('');
@@ -49,12 +41,12 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
 
   // Callback referansları
   const onGameUpdateRef = useRef<((data: BluffGameData) => void) | null>(null);
-  const onPlayerJoinedRef = useRef<((player: any) => void) | null>(null);
-  const onPlayerLeftRef = useRef<((player: any) => void) | null>(null);
-  const onBetPlacedRef = useRef<((bet: any) => void) | null>(null);
-  const onChallengeResultRef = useRef<((result: any) => void) | null>(null);
-  const onRoundEndRef = useRef<((result: any) => void) | null>(null);
-  const onChatMessageRef = useRef<((message: any) => void) | null>(null);
+  const onPlayerJoinedRef = useRef<((player: { name: string }) => void) | null>(null);
+  const onPlayerLeftRef = useRef<((player: { name: string }) => void) | null>(null);
+  const onBetPlacedRef = useRef<((bet: { playerName: string; quantity: number; value: number; isBluff: boolean }) => void) | null>(null);
+  const onChallengeResultRef = useRef<((result: { message: string }) => void) | null>(null);
+  const onRoundEndRef = useRef<((result: { winner: string; loser: string }) => void) | null>(null);
+  const onChatMessageRef = useRef<((message: { id: string; name: string; message: string; timestamp: number }) => void) | null>(null);
 
   // Socket bağlantısı
   useEffect(() => {

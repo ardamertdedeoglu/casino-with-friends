@@ -53,29 +53,17 @@ interface BluffGameData {
   myDice?: number[];
 }
 
-interface GameData {
-  gameRoom: GameRoom;
-  players: Player[];
-  currentPlayer: string;
-  currentBet: Bet | null;
-  phase: 'waiting' | 'betting' | 'playing' | 'finished';
-  roundNumber: number;
-  myDice?: number[];
-}
-
 interface PlayerJoinedData {
   name: string;
 }
 
-interface PlayerLeftData {
-  name: string;
+interface ChallengeResultData {
+  message: string;
 }
 
-interface BetPlacedData {
-  playerName: string;
-  quantity: number;
-  value: number;
-  isBluff: boolean;
+interface RoundEndData {
+  winner: string;
+  loser: string;
 }
 
 interface ChallengeResultData {
@@ -157,7 +145,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
       setTimeout(() => setMessage(''), 3000);
     });
 
-    onBetPlaced((bet: BetPlacedData) => {
+    onBetPlaced((bet: { playerName: string; quantity: number; value: number; isBluff: boolean }) => {
       setCurrentBet(bet as Bet);
       setMessage(`${bet.playerName}: ${bet.quantity} tane ${bet.value}${bet.isBluff ? ' (Blöf!)' : ''}`);
     });
@@ -171,10 +159,10 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
       setMessage(`Tur bitti! ${result.winner} kazandı, ${result.loser} kaybetti`);
       setTimeout(() => setMessage(''), 5000);
     });
-  }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onRoundEnd, updatePlayers]);
+  }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onRoundEnd, updatePlayers, socketId]);
 
   // Bahis yerleştirme
-  const handleBetPlaced = (_amount: number, _sessionId: string) => {
+  const handleBetPlaced = () => {
     setShowBetPlacement(false);
     setGamePhase('playing');
     // İlk bahis için gerekli işlemler
