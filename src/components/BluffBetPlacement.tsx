@@ -201,7 +201,7 @@ export default function BluffBetPlacement({
       {!isValidBet(quantity, value) && currentBet && (
         <div className="bg-red-900 bg-opacity-50 border border-red-500 p-3 rounded-lg mb-4">
           <div className="text-red-400 text-sm text-center">
-            ⚠️ Bahis {currentBet.quantity} × {currentBet.value}'den yüksek olmalı
+            ⚠️ Bahis {currentBet.quantity} × {currentBet.value}&apos;den yüksek olmalı
           </div>
         </div>
       )}

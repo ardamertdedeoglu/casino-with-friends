@@ -522,7 +522,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                           
                           {!isValidBet(betQuantity, betValue) && currentBet && (
                             <div className="text-red-400 text-xs text-center">
-                              Bahis {currentBet.quantity} × {currentBet.value}'den yüksek olmalı
+                              Bahis {currentBet.quantity} × {currentBet.value}&apos;den yüksek olmalı
                             </div>
                           )}
                         </div>
