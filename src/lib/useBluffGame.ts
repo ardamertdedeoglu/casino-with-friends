@@ -31,6 +31,7 @@ interface BluffGameData {
   phase: 'waiting' | 'betting' | 'playing' | 'finished';
   roundNumber: number;
   myDice?: number[];
+  showAllDice?: boolean; // Yeni alan
 }
 
 export function useBluffGame(roomId: string, playerName: string, enableChat: boolean = false) {
@@ -50,38 +51,52 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
 
   // Socket bağlantısı
   useEffect(() => {
-    const socketInstance = process.env.NODE_ENV === 'production'
-      ? io(process.env.NEXT_PUBLIC_APP_URL || window.location.origin, {
-        transports: ['websocket', 'polling'],
-        path: '/api/socket'
-      })
-      : io('http://localhost:3000', {
-          transports: ['websocket', 'polling'],
-          path: '/api/socket'
-        });
+    console.log('🔌 Creating socket connection for room:', roomId, 'player:', playerName);
+    
+    const socket = io(process.env.NODE_ENV === 'production'
+      ? process.env.NEXT_PUBLIC_APP_URL || "https://casino-with-friends-production.up.railway.app"
+      : "http://localhost:3000", {
+      path: '/api/socket',
+      transports: ['websocket', 'polling'],
+      forceNew: true, // Force new connection to avoid issues
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      upgrade: true,
+      rememberUpgrade: true
+    });
 
-    socketInstance.on('connect', () => {
-      console.log('🔌 Blöf oyununa bağlandı:', socketInstance.id);
-      setSocketId(socketInstance.id || '');
+    socket.on('connect', () => {
+      console.log('🔌 Blöf oyununa bağlandı:', socket.id);
+      console.log('🔌 Socket connected status:', socket.connected);
+      setSocketId(socket.id || '');
       setIsConnected(true);
 
       // Odaya katıl
-      socketInstance.emit('join-bluff-room', {
+      console.log('🔌 Joining bluff room:', { roomId, playerName, enableChat });
+      socket.emit('join-bluff-room', {
         roomId,
         playerName,
         enableChat
       });
     });
 
-    socketInstance.on('disconnect', () => {
+    socket.on('disconnect', () => {
       console.log('🔌 Blöf oyunundan bağlantı kesildi');
       setIsConnected(false);
     });
 
     // Oyun güncellemeleri
-    socketInstance.on('bluff-game-update', (data: BluffGameData) => {
-      console.log('🔌 Bluff game update received:', data);
-      console.log('🔌 Players in update:', data.players?.length || 0);
+    socket.on('bluff-game-update', (data: BluffGameData) => {
+      console.log('🔌 Bluff game update received:', {
+        playersCount: data.players?.length || 0,
+        currentPlayer: data.currentPlayer,
+        phase: data.phase,
+        myDice: data.myDice?.length || 0,
+        gameRoomId: data.gameRoom?.id
+      });
+      console.log('🔌 Full game data:', data);
       setGameData(data);
       if (onGameUpdateRef.current) {
         console.log('🔌 Calling onGameUpdate callback');
@@ -92,34 +107,45 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
     });
 
     // Oyuncu olayları
-    socketInstance.on('bluff-player-joined', (player) => {
+    socket.on('bluff-player-joined', (player) => {
       if (onPlayerJoinedRef.current) {
         onPlayerJoinedRef.current(player);
       }
     });
 
-    socketInstance.on('bluff-player-left', (player) => {
+    socket.on('bluff-player-left', (player) => {
       if (onPlayerLeftRef.current) {
         onPlayerLeftRef.current(player);
       }
     });
 
     // Bahis olayları
-    socketInstance.on('bluff-bet-placed', (bet) => {
+    socket.on('bluff-bet-placed', (bet) => {
       if (onBetPlacedRef.current) {
         onBetPlacedRef.current(bet);
       }
     });
 
     // İtiraz sonuçları
-    socketInstance.on('bluff-challenge-result', (result) => {
+    socket.on('bluff-challenge-result', (result) => {
       if (onChallengeResultRef.current) {
         onChallengeResultRef.current(result);
       }
     });
 
+    // Tüm zarları göster (itiraz sonrası)
+    socket.on('bluff-show-all-dice', (gameStateWithAllDice) => {
+      console.log('🎲 Showing all dice after challenge:', gameStateWithAllDice);
+      if (onGameUpdateRef.current) {
+        onGameUpdateRef.current({
+          ...gameStateWithAllDice,
+          showAllDice: true
+        });
+      }
+    });
+
     // Tur sonu
-    socketInstance.on('bluff-round-end', (result) => {
+    socket.on('bluff-round-end', (result) => {
       if (onRoundEndRef.current) {
         onRoundEndRef.current(result);
       }
@@ -127,7 +153,7 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
 
     // Chat mesajları
     if (enableChat) {
-      socketInstance.on('bluff-chat-message', (message) => {
+      socket.on('bluff-chat-message', (message) => {
         if (onChatMessageRef.current) {
           onChatMessageRef.current(message);
         }
@@ -135,14 +161,19 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
     }
 
     // Hata yönetimi
-    socketInstance.on('bluff-error', (error) => {
+    socket.on('bluff-error', (error) => {
       console.error('Blöf oyunu hatası:', error);
     });
 
-    setSocket(socketInstance);
+    // Oda join hatası
+    socket.on('join-error', (error) => {
+      console.error('Odaya katılma hatası:', error);
+    });
+
+    setSocket(socket);
 
     return () => {
-      socketInstance.disconnect();
+      socket.disconnect();
     };
   }, [roomId, playerName, enableChat]);
 
@@ -176,13 +207,13 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
   }, []);
 
   // Aksiyon gönderme
-  const sendBluffAction = useCallback((actionType: 'raise' | 'bluff', betData: { quantity: number; value: number }) => {
+  const sendBluffAction = useCallback((actionType: 'raise' | 'bluff' | 'start-game', betData?: { quantity?: number; value?: number }) => {
     if (!socket || !isConnected) return;
 
     socket.emit('bluff-action', {
       roomId,
       actionType,
-      betData
+      betData: betData || {}
     });
   }, [socket, isConnected, roomId]);
 

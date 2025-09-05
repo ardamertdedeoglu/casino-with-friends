@@ -967,25 +967,52 @@ class BluffGame {
   }
 
   addPlayer(socketId, playerName) {
+    console.log(`🎲 Attempting to add player: ${playerName} (${socketId})`);
+    console.log(`🎲 Current players count: ${this.players.size}/${this.settings.maxPlayers}`);
+    
+    // Check if this socketId already exists (prevent duplicates)
+    if (this.players.has(socketId)) {
+      console.log(`⚠️ Socket ${socketId} already exists, updating player info`);
+      const existingPlayer = this.players.get(socketId);
+      existingPlayer.name = playerName;
+      existingPlayer.isConnected = true;
+      return true;
+    }
+    
+    // Check for same name with different socketId
+    for (const [existingSocketId, player] of this.players) {
+      if (player.name === playerName && existingSocketId !== socketId) {
+        console.log(`🔄 Player name ${playerName} exists with different socket, removing old one`);
+        this.players.delete(existingSocketId);
+        break;
+      }
+    }
+
     if (this.players.size >= this.settings.maxPlayers) {
+      console.log(`❌ Room is full: ${this.players.size}/${this.settings.maxPlayers}`);
       return false;
     }
 
     // İlk oyuncu room owner olur
     if (this.players.size === 0) {
       this.roomOwner = socketId;
+      console.log(`👑 ${playerName} is now room owner`);
     }
 
-    this.players.set(socketId, {
+    const newPlayer = {
       id: socketId,
       name: playerName,
       dice: this.rollDice(5), // 5 zar
       chips: 1000, // Başlangıç chip'i
       isActive: false,
       isConnected: true
-    });
-
-    console.log(`🎲 Player ${playerName} (${socketId}) added to bluff game ${this.roomId}`);
+    };
+    
+    this.players.set(socketId, newPlayer);
+    console.log(`✅ Player ${playerName} (${socketId}) added to bluff game ${this.roomId}`);
+    console.log(`🎲 Total players now: ${this.players.size}`);
+    console.log(`🎲 All players:`, Array.from(this.players.entries()).map(([id, p]) => ({ id, name: p.name })));
+    
     return true;
   }
 
@@ -1016,7 +1043,7 @@ class BluffGame {
   }
 
   startGame() {
-    if (this.players.size < 2) {
+    if (this.players.size < 1) {
       return false;
     }
 
@@ -1137,8 +1164,8 @@ class BluffGame {
     loser.chips -= betAmount;
     winner.chips += betAmount;
 
-    // Sonuçları broadcast et
-    this.io.to(this.roomId).emit('bluff-challenge-result', {
+    // Tüm zarları göstermek için özel broadcast
+    this.broadcastChallengeResult({
       message: betCorrect
         ? `${challenger.name} itiraz etti ama bahis doğruydu! ${actualCount} zar bulundu. ${challenger.name} kaybetti!`
         : `${challenger.name} itiraz etti ve bahis yanlıştı! Sadece ${actualCount} zar bulundu. ${betPlayer.name} kaybetti!`,
@@ -1146,27 +1173,83 @@ class BluffGame {
       loser: loser.name,
       actualCount: actualCount,
       betQuantity: this.currentBet.quantity,
-      betValue: this.currentBet.value
+      betValue: this.currentBet.value,
+      allDice: allDice,
+      playersWithDice: Array.from(this.players.values()).map(p => ({
+        id: p.id,
+        name: p.name,
+        dice: p.dice
+      }))
     });
 
     // Turu bitir ve yeni tur başlat
-    this.endRound();
+    setTimeout(() => {
+      this.endRound();
+    }, 3000); // 3 saniye bekle ki oyuncular sonuçları görebilsin
+    
     return true;
   }
 
+  // İtiraz sonuçlarını tüm zarlar ile birlikte gönder
+  broadcastChallengeResult(resultData) {
+    this.io.to(this.roomId).emit('bluff-challenge-result', resultData);
+    
+    // Tüm zarları gösteren özel game state gönder
+    const playersWithAllDice = Array.from(this.players.values()).map(player => ({
+      id: player.id,
+      name: player.name,
+      chips: player.chips,
+      dice: player.dice, // Tüm zarları göster
+      isActive: player.isActive,
+      isConnected: player.isConnected
+    }));
+
+    const gameStateWithAllDice = {
+      gameRoom: {
+        id: this.roomId,
+        game_type: 'bluff',
+        status: this.gameState,
+        current_round: this.roundNumber,
+        max_players: this.settings.maxPlayers
+      },
+      players: playersWithAllDice,
+      currentPlayer: this.currentPlayer,
+      currentBet: this.currentBet,
+      phase: this.gameState,
+      roundNumber: this.roundNumber,
+      results: this.gameResults,
+      showAllDice: true // Özel flag
+    };
+
+    this.io.to(this.roomId).emit('bluff-show-all-dice', gameStateWithAllDice);
+  }
+
   isValidBet(quantity, value) {
+    // Temel kontroller
+    if (quantity < 1 || value < 1 || value > 6) {
+      return false;
+    }
+
+    // İlk bahis - her şey geçerli (minimum sınırlar dahilinde)
     if (!this.currentBet) {
-      // İlk bahis - her şey geçerli
-      return quantity >= 1 && value >= 1 && value <= 6;
+      return quantity >= 1 && quantity <= (this.players.size * 5); // Maksimum tüm zarlar
     }
 
     // Sonraki bahisler daha yüksek olmalı
-    if (quantity > this.currentBet.quantity) {
+    const currentQuantity = this.currentBet.quantity;
+    const currentValue = this.currentBet.value;
+
+    // Aynı miktar, daha yüksek değer
+    if (quantity === currentQuantity && value > currentValue) {
       return true;
-    } else if (quantity === this.currentBet.quantity) {
-      return value > this.currentBet.value;
+    }
+    
+    // Daha fazla miktar, herhangi bir değer
+    if (quantity > currentQuantity) {
+      return true;
     }
 
+    // Geçersiz bahis
     return false;
   }
 
@@ -1241,34 +1324,76 @@ class BluffGame {
   }
 
   broadcastGameState() {
-    const players = Array.from(this.players.values()).map(player => ({
-      id: player.id,
-      name: player.name,
-      chips: player.chips,
-      dice: player.id === this.currentPlayer ? player.dice : [], // Sadece aktif oyuncunun zarları
-      isActive: player.isActive,
-      isConnected: player.isConnected
-    }));
+    console.log(`🎲 Broadcasting game state for room ${this.roomId}: ${this.players.size} players`);
+    
+    // Eğer oyuncu yoksa boş state gönder
+    if (this.players.size === 0) {
+      const emptyGameState = {
+        gameRoom: {
+          id: this.roomId,
+          game_type: 'bluff',
+          status: this.gameState,
+          current_round: this.roundNumber,
+          max_players: this.settings.maxPlayers
+        },
+        players: [],
+        currentPlayer: null,
+        currentBet: null,
+        phase: this.gameState,
+        roundNumber: this.roundNumber,
+        results: this.gameResults
+      };
+      
+      this.io.to(this.roomId).emit('bluff-game-update', emptyGameState);
+      return;
+    }
 
-    console.log(`🎲 Broadcasting game state for room ${this.roomId}: ${players.length} players`);
+    // Her oyuncuya özel veri hazırla
+    for (const [socketId, player] of this.players) {
+      console.log(`📤 Sending game state to ${player.name} (${socketId})`);
+      
+      const playersForThisSocket = Array.from(this.players.values()).map(p => {
+        const isCurrentPlayer = p.id === socketId;
+        const shouldShowDice = isCurrentPlayer; // Sadece kendi zarlarını göster
 
-    const gameState = {
-      gameRoom: {
-        id: this.roomId,
-        game_type: 'bluff',
-        status: this.gameState,
-        current_round: this.roundNumber,
-        max_players: this.settings.maxPlayers
-      },
-      players: players,
-      currentPlayer: this.currentPlayer,
-      currentBet: this.currentBet,
-      phase: this.gameState,
-      roundNumber: this.roundNumber,
-      results: this.gameResults
-    };
+        return {
+          id: p.id,
+          name: p.name,
+          chips: p.chips,
+          dice: shouldShowDice ? p.dice : [], // Sadece kendi zarlarını gönder
+          isActive: p.isActive,
+          isConnected: p.isConnected
+        };
+      });
 
-    this.io.to(this.roomId).emit('bluff-game-update', gameState);
+      const gameStateForSocket = {
+        gameRoom: {
+          id: this.roomId,
+          game_type: 'bluff',
+          status: this.gameState,
+          current_round: this.roundNumber,
+          max_players: this.settings.maxPlayers
+        },
+        players: playersForThisSocket,
+        currentPlayer: this.currentPlayer,
+        currentBet: this.currentBet,
+        phase: this.gameState,
+        roundNumber: this.roundNumber,
+        results: this.gameResults,
+        myDice: player.dice // Kendi zarlarını ayrı olarak gönder
+      };
+
+      console.log(`📤 Game state for ${player.name}:`, {
+        playersCount: gameStateForSocket.players.length,
+        myDiceCount: gameStateForSocket.myDice.length,
+        currentPlayer: gameStateForSocket.currentPlayer,
+        phase: gameStateForSocket.phase
+      });
+
+      // Bu socket'e özel game state gönder
+      this.io.to(socketId).emit('bluff-game-update', gameStateForSocket);
+    }
+
     console.log(`📤 Bluff game state sent to room ${this.roomId}`);
   }
 
@@ -1315,14 +1440,29 @@ app.prepare().then(() => {
     socket.on('join-room', (data) => {
       const { roomId, playerName } = data;
       console.log(`🎯 Player ${playerName} (${socket.id}) joining room ${roomId}`);
+      
+      // Check if this is a bluff room (starts with 'bluff_')
+      if (roomId.startsWith('bluff_')) {
+        console.log(`⚠️ Bluff room detected in join-room event, ignoring. Use join-bluff-room instead.`);
+        return;
+      }
+      
       socket.join(roomId);
 
       if (!gameRooms.has(roomId)) {
         gameRooms.set(roomId, new BlackjackGame(roomId, io));
-        console.log(`🆕 Created new game room: ${roomId}`);
+        console.log(`🆕 Created new blackjack game room: ${roomId}`);
       }
 
       const game = gameRooms.get(roomId);
+      
+      // Make sure this is a BlackjackGame
+      if (!(game instanceof BlackjackGame)) {
+        console.log(`❌ Room ${roomId} is not a Blackjack game`);
+        return;
+      }
+
+      // ... existing code ...
 
       // Aynı socket ID ile oyuncu zaten varsa, güncelleme yap
       if (game.players.has(socket.id)) {
@@ -1647,6 +1787,7 @@ app.prepare().then(() => {
     socket.on('join-bluff-room', (data) => {
       const { roomId, playerName, enableChat } = data;
       console.log(`🎲 Player ${playerName} (${socket.id}) joining bluff room ${roomId}`);
+      console.log(`🎲 Socket ID: ${socket.id}, Socket connected: ${socket.connected}`);
       socket.join(roomId);
 
       // Blöf oyun odası oluştur veya mevcut olanı al
@@ -1656,11 +1797,21 @@ app.prepare().then(() => {
       }
 
       const game = gameRooms.get(roomId);
+      
+      // Make sure this is a BluffGame
+      if (!(game instanceof BluffGame)) {
+        console.log(`❌ Room ${roomId} is not a Bluff game, it's a ${game.constructor.name}`);
+        socket.emit('join-error', { message: 'Bu oda blöf oyunu için değil' });
+        return;
+      }
+      
+      console.log(`🎲 Current players in room ${roomId}: ${game.players.size}`);
 
       // Oyuncuyu ekle
       if (game.addPlayer(socket.id, playerName)) {
         // Başarıyla eklendi
         console.log(`✅ Player ${playerName} (${socket.id}) joined bluff room ${roomId}`);
+        console.log(`🎲 Total players after join: ${game.players.size}`);
 
         // Chat için ayrı odaya ekle
         if (enableChat) {
@@ -1696,9 +1847,14 @@ app.prepare().then(() => {
         success = game.makeBet(socket.id, betData.quantity, betData.value);
       } else if (actionType === 'bluff') {
         success = game.makeBluff(socket.id, betData.quantity, betData.value);
+      } else if (actionType === 'start-game') {
+        success = game.startGame();
+        if (success) {
+          game.broadcastGameState();
+        }
       }
 
-      if (!success) {
+      if (!success && actionType !== 'start-game') {
         socket.emit('bluff-error', { message: 'Geçersiz aksiyon' });
       }
     });
@@ -1747,8 +1903,38 @@ app.prepare().then(() => {
       // Tüm odalardan oyuncuyu çıkar
       for (const [roomId, game] of gameRooms) {
         if (game instanceof BluffGame) {
-          game.removePlayer(socket.id);
-          game.broadcastGameState();
+          const hadPlayer = game.players.has(socket.id);
+          if (hadPlayer) {
+            console.log(`🎲 Removing player ${socket.id} from bluff room ${roomId}`);
+            game.removePlayer(socket.id);
+            game.broadcastGameState();
+          }
+        } else if (game instanceof BlackjackGame) {
+          // Handle Blackjack disconnections separately
+          const playerWasCurrent = game.currentPlayer === socket.id;
+          const hadPlayer = game.players.has(socket.id);
+          
+          if (hadPlayer) {
+            console.log(`♠️ Removing player ${socket.id} from blackjack room ${roomId}`);
+            game.removePlayer(socket.id);
+
+            if (game.players.size === 0) {
+              console.log(`🗑️ Deleting empty blackjack room: ${roomId}`);
+              gameRooms.delete(roomId);
+            } else {
+              // Eğer disconnect olan oyuncu sıradaysa, sıradaki oyuncuya geç
+              if (playerWasCurrent && game.gameState === 'playing') {
+                const playerIds = Array.from(game.players.keys());
+                if (playerIds.length > 0) {
+                  game.currentPlayer = playerIds[0];
+                  console.log(`🔄 Current player changed to: ${game.currentPlayer}`);
+                }
+              }
+
+              console.log(`📤 Sending game update after disconnect in blackjack room: ${roomId}`);
+              io.to(roomId).emit('game-update', game.getGameState());
+            }
+          }
         }
       }
     });

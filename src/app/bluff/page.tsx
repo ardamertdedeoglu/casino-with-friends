@@ -69,7 +69,7 @@ export default function BluffPage() {
           <h1 className="text-3xl font-bold text-yellow-400 mb-4">Blöf Oyunu</h1>
           <p className="text-gray-300 mb-6">Blöf oynamak için lütfen giriş yapın.</p>
           <button
-            onClick={() => router.push('/auth')}
+            onClick={() => router.push('/')}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl font-bold hover:from-blue-700 hover:to-blue-800 transition-all duration-300"
           >
             Giriş Yap

@@ -26,7 +26,7 @@ export default function BluffRoomPage() {
 
   useEffect(() => {
     if (!user) {
-      router.push('/auth');
+      router.push('/');
       return;
     }
 
