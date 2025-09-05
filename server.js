@@ -1190,9 +1190,113 @@ class BluffGame {
     return true;
   }
 
+  spotOn(socketId) {
+    if (this.gameState !== 'playing' || this.currentPlayer !== socketId) {
+      return false;
+    }
+
+    if (!this.currentBet) {
+      return false;
+    }
+    const spotOnPlayer = this.players.get(socketId);
+    const betPlayer = this.players.get(this.currentBet.playerId);
+
+    console.log(`🎯 Player ${spotOnPlayer.name} said SPOT ON to ${betPlayer.name}'s bet: ${this.currentBet.quantity} × ${this.currentBet.value}`);
+
+    // Tüm zarları topla ve bahsi kontrol et
+    const allDice = [];
+    for (const [playerId, player] of this.players) {
+      allDice.push(...player.dice);
+    }
+
+    const actualCount = allDice.filter(die => die === this.currentBet.value).length;
+    const betExactlyCorrect = actualCount === this.currentBet.quantity; // TAM OLARAK doğru olmalı
+
+    let winner, loser;
+
+    if (betExactlyCorrect) {
+      // Bahis tam olarak doğru - spot on player kazanır
+      winner = spotOnPlayer;
+      loser = betPlayer;
+      console.log(`✅ SPOT ON correct! Exactly ${actualCount} dice found, ${spotOnPlayer.name} wins 3x chips!`);
+    } else {
+      // Bahis tam olarak doğru değil - spot on player kaybeder
+      winner = betPlayer;
+      loser = spotOnPlayer;
+      console.log(`❌ SPOT ON wrong! ${actualCount} dice found (not exactly ${this.currentBet.quantity}), ${spotOnPlayer.name} loses`);
+    }
+
+    // Chip transferi - Spot On başarılıysa 3x chip kazanır
+    const baseAmount = 100; // Sabit bahis miktarı
+    const chipAmount = betExactlyCorrect ? baseAmount * 3 : baseAmount; // 3x chip if spot on correct
+    
+    loser.chips -= chipAmount;
+    winner.chips += chipAmount;
+
+    // Tüm zarları göstermek için özel broadcast
+    this.broadcastSpotOnResult({
+      message: betExactlyCorrect
+        ? `${spotOnPlayer.name} SPOT ON dedi ve doğruydu! Tam olarak ${actualCount} zar bulundu. ${spotOnPlayer.name} ${chipAmount} chip kazandı!`
+        : `${spotOnPlayer.name} SPOT ON dedi ama yanlıştı! ${actualCount} zar bulundu (tam ${this.currentBet.quantity} değil). ${spotOnPlayer.name} ${chipAmount} chip kaybetti!`,
+      winner: winner.name,
+      loser: loser.name,
+      actualCount: actualCount,
+      betQuantity: this.currentBet.quantity,
+      betValue: this.currentBet.value,
+      chipAmount: chipAmount,
+      allDice: allDice,
+      playersWithDice: Array.from(this.players.values()).map(p => ({
+        id: p.id,
+        name: p.name,
+        dice: p.dice
+      }))
+    });
+
+    // Turu bitir ve yeni tur başlat
+    setTimeout(() => {
+      this.endRound();
+    }, 3000); // 3 saniye bekle ki oyuncular sonuçları görebilsin
+    
+    return true;
+  }
+
   // İtiraz sonuçlarını tüm zarlar ile birlikte gönder
   broadcastChallengeResult(resultData) {
     this.io.to(this.roomId).emit('bluff-challenge-result', resultData);
+    
+    // Tüm zarları gösteren özel game state gönder
+    const playersWithAllDice = Array.from(this.players.values()).map(player => ({
+      id: player.id,
+      name: player.name,
+      chips: player.chips,
+      dice: player.dice, // Tüm zarları göster
+      isActive: player.isActive,
+      isConnected: player.isConnected
+    }));
+
+    const gameStateWithAllDice = {
+      gameRoom: {
+        id: this.roomId,
+        game_type: 'bluff',
+        status: this.gameState,
+        current_round: this.roundNumber,
+        max_players: this.settings.maxPlayers
+      },
+      players: playersWithAllDice,
+      currentPlayer: this.currentPlayer,
+      currentBet: this.currentBet,
+      phase: this.gameState,
+      roundNumber: this.roundNumber,
+      results: this.gameResults,
+      showAllDice: true // Özel flag
+    };
+
+    this.io.to(this.roomId).emit('bluff-show-all-dice', gameStateWithAllDice);
+  }
+
+  // Spot On sonuçlarını tüm zarlar ile birlikte gönder
+  broadcastSpotOnResult(resultData) {
+    this.io.to(this.roomId).emit('bluff-spot-on-result', resultData);
     
     // Tüm zarları gösteren özel game state gönder
     const playersWithAllDice = Array.from(this.players.values()).map(player => ({
@@ -1852,6 +1956,8 @@ app.prepare().then(() => {
         if (success) {
           game.broadcastGameState();
         }
+      } else if (actionType === 'spot-on') {
+        success = game.spotOn(socket.id);
       }
 
       if (!success && actionType !== 'start-game') {

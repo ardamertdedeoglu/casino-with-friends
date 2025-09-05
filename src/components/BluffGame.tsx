@@ -83,6 +83,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   const [showBettingInterface, setShowBettingInterface] = useState(false);
   const [betQuantity, setBetQuantity] = useState(1);
   const [betValue, setBetValue] = useState(1);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const { user } = useAuth();
   const { userProfile } = useVirtualCurrency();
@@ -98,6 +99,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
     onPlayerLeft,
     onBetPlaced,
     onChallengeResult,
+    onSpotOnResult,
     onRoundEnd
   } = useBluffGame(roomId, user?.user_metadata?.username || 'Oyuncu');
 
@@ -208,11 +210,20 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
       }, 5000);
     });
 
+    onSpotOnResult((result: ChallengeResultData) => {
+      setMessage(result.message);
+      setAllDiceVisible(true); // Spot On sonuçlarını göstermek için tüm zarları aç
+      setTimeout(() => {
+        setMessage('');
+        setAllDiceVisible(false);
+      }, 5000);
+    });
+
     onRoundEnd((result: RoundEndData) => {
       setMessage(`Tur bitti! ${result.winner} kazandı, ${result.loser} kaybetti`);
       setTimeout(() => setMessage(''), 5000);
     });
-  }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onRoundEnd, updatePlayers, socketId]);
+  }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onSpotOnResult, onRoundEnd, updatePlayers, socketId]);
 
   // Bahis yerleştirme
   const handleBetPlaced = () => {
@@ -249,6 +260,12 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   // İtiraz etmek için fonksiyon
   const handleChallenge = () => {
     sendChallenge();
+    setAllDiceVisible(true);
+  };
+
+  // Spot On için fonksiyon
+  const handleSpotOn = () => {
+    sendBluffAction('spot-on', { quantity: betQuantity, value: betValue } );
     setAllDiceVisible(true);
   };
 
@@ -387,16 +404,18 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
               <div className="text-white">
                 💎 <span className="text-yellow-400 font-bold">{userProfile.chips.toLocaleString()}</span>
               </div>
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white w-10 h-10 rounded-full hover:from-blue-700 hover:to-blue-800 transition-all duration-300 flex items-center justify-center text-xl font-bold shadow-lg hover:shadow-xl transform hover:scale-110"
+                title="Oyun talimatları ve yardım"
+              >
+                ?
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Oyun mesajı */}
-        {message && (
-          <div className="bg-blue-600 text-white p-3 text-center font-bold animate-pulse">
-            {message}
-          </div>
-        )}
+        {/* Oyun mesajı - Removed from top, moved to table center */}
 
         {/* Ana oyun içeriği */}
         <div className="flex-1 flex">
@@ -412,6 +431,15 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
           <div className="flex-1 relative">
               {/* Masa */}
               <div className="absolute inset-4 bg-gradient-to-br from-green-800 to-green-900 rounded-full shadow-2xl border-8 border-yellow-600">
+                {/* Challenge result message - Center of table */}
+                {message && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
+                    <div className="bg-blue-600 text-white px-6 py-4 rounded-xl border-4 border-blue-400 shadow-2xl text-center font-bold animate-pulse max-w-md">
+                      {message}
+                    </div>
+                  </div>
+                )}
+                
                 {/* Masanın merkezi - Bahis Kontrolleri */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                   {/* Oyun başlatma butonu */}
@@ -477,19 +505,45 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                           <div className="flex items-center justify-between mb-4">
                             <label className="text-gray-300 text-sm font-semibold">Değer:</label>
                             <div className="flex space-x-2">
-                              {[1, 2, 3, 4, 5, 6].map(value => (
-                                <button
-                                  key={value}
-                                  onClick={() => setBetValue(value)}
-                                  className={`w-10 h-10 rounded-lg border-2 text-sm font-bold transition-all ${
-                                    betValue === value
-                                      ? 'bg-yellow-500 border-yellow-300 text-black scale-110'
-                                      : 'bg-gray-600 border-gray-500 text-white hover:bg-gray-500 hover:scale-105'
-                                  }`}
-                                >
-                                  {value}
-                                </button>
-                              ))}
+                              {[1, 2, 3, 4, 5, 6].map(value => {
+                                // Zar deseni
+                                const getDotPattern = (value: number) => {
+                                  const patterns = {
+                                    1: [[0,0,0],[0,1,0],[0,0,0]],
+                                    2: [[1,0,0],[0,0,0],[0,0,1]],
+                                    3: [[1,0,0],[0,1,0],[0,0,1]],
+                                    4: [[1,0,1],[0,0,0],[1,0,1]],
+                                    5: [[1,0,1],[0,1,0],[1,0,1]],
+                                    6: [[1,0,1],[1,0,1],[1,0,1]]
+                                  };
+                                  return patterns[value as keyof typeof patterns] || patterns[1];
+                                };
+                                
+                                return (
+                                  <button
+                                    key={value}
+                                    onClick={() => setBetValue(value)}
+                                    className={`relative w-12 h-12 rounded-lg border-2 transition-all ${
+                                      betValue === value
+                                        ? 'bg-white border-yellow-400 border-4 scale-110 shadow-lg shadow-yellow-400/50'
+                                        : 'bg-white border-gray-400 hover:bg-gray-100 hover:scale-105 shadow-md'
+                                    }`}
+                                    title={`Zar değeri: ${value}`}
+                                  >
+                                    {/* Zar deseni */}
+                                    <div className="grid grid-cols-3 gap-0.5 w-8 h-8 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                                      {getDotPattern(value).flat().map((dot, dotIndex) => (
+                                        <div
+                                          key={dotIndex}
+                                          className={`w-1.5 h-1.5 rounded-full ${
+                                            dot ? 'bg-gray-800' : 'bg-transparent'
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
                           
@@ -561,12 +615,21 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                             </button>
 
                             {currentBet && (
-                              <button
-                                onClick={handleChallenge}
-                                className="w-full bg-gradient-to-r from-orange-600 to-orange-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg transform hover:scale-105"
-                              >
-                                ⚔️ İtiraz Et
-                              </button>
+                              <>
+                                <button
+                                  onClick={handleChallenge}
+                                  className="w-full bg-gradient-to-r from-orange-600 to-orange-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg transform hover:scale-105"
+                                >
+                                  ⚔️ İtiraz Et
+                                </button>
+                                
+                                <button
+                                  onClick={handleSpotOn}
+                                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-lg transform hover:scale-105"
+                                >
+                                  🎯 SPOT ON!
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -793,8 +856,31 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                   <div className="flex items-center justify-center space-x-2 text-white text-lg mb-2">
                     <span className="font-bold text-xl">{currentBet.quantity}</span>
                     <span>×</span>
-                    <div className="w-8 h-8 bg-white rounded border-2 border-gray-800 flex items-center justify-center text-black font-bold text-sm">
-                      {currentBet.value}
+                    <div className="relative w-8 h-8 bg-white rounded border-2 border-gray-800">
+                      {/* Zar deseni */}
+                      <div className="grid grid-cols-3 gap-0.5 w-6 h-6 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                        {(() => {
+                          const getDotPattern = (value: number) => {
+                            const patterns = {
+                              1: [[0,0,0],[0,1,0],[0,0,0]],
+                              2: [[1,0,0],[0,0,0],[0,0,1]],
+                              3: [[1,0,0],[0,1,0],[0,0,1]],
+                              4: [[1,0,1],[0,0,0],[1,0,1]],
+                              5: [[1,0,1],[0,1,0],[1,0,1]],
+                              6: [[1,0,1],[1,0,1],[1,0,1]]
+                            };
+                            return patterns[value as keyof typeof patterns] || patterns[1];
+                          };
+                          return getDotPattern(currentBet.value).flat().map((dot, dotIndex) => (
+                            <div
+                              key={dotIndex}
+                              className={`w-1 h-1 rounded-full ${
+                                dot ? 'bg-gray-800' : 'bg-transparent'
+                              }`}
+                            />
+                          ));
+                        })()} 
+                      </div>
                     </div>
                   </div>
                   
@@ -886,6 +972,222 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
           </div>
         </div>
       </div>
+
+      {/* Yardım Modalı */}
+      {showHelpModal && (
+        <div className="fixed inset-0 backdrop-blur-sm bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-900 to-black max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-3xl border-4 border-yellow-500 shadow-2xl">
+            <div className="p-8">
+              {/* Başlık */}
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-4xl font-bold text-yellow-400 flex items-center">
+                  🎲 Blöf Oyunu Rehberi
+                </h2>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="text-gray-400 hover:text-white text-3xl font-bold w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 transition-all duration-300 flex items-center justify-center"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Ana içerik */}
+              <div className="space-y-8 text-white">
+                {/* Oyunun Amacı */}
+                <section>
+                  <h3 className="text-2xl font-bold text-green-400 mb-4 flex items-center">
+                    🎯 Oyunun Amacı
+                  </h3>
+                  <div className="bg-gray-800 p-4 rounded-xl">
+                    <p className="text-lg leading-relaxed">
+                      Blöf, zarlarla oynanan bir bluff (aldatma) oyunudur. Her oyuncu 5 zar ile başlar ve amacınız 
+                      diğer oyuncuları kandırarak veya doğru tahminler yaparak oyunu kazanmaktır.
+                    </p>
+                  </div>
+                </section>
+
+                {/* Oyun Kurulumu */}
+                <section>
+                  <h3 className="text-2xl font-bold text-blue-400 mb-4 flex items-center">
+                    ⚙️ Oyun Kurulumu
+                  </h3>
+                  <div className="bg-gray-800 p-4 rounded-xl space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-yellow-400 font-bold">•</span>
+                      <p>Her oyuncu 5 zar ile başlar (sadece kendi zarlarınızı görebilirsiniz).</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-yellow-400 font-bold">•</span>
+                      <p>Oyun saat yönünde devam eder.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-yellow-400 font-bold">•</span>
+                      <p>Her tur bir oyuncu ile başlar ve diğerleri sırayla oynаr.</p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Oynanış */}
+                <section>
+                  <h3 className="text-2xl font-bold text-purple-400 mb-4 flex items-center">
+                    🎮 Nasıl Oynanır
+                  </h3>
+                  <div className="bg-gray-800 p-4 rounded-xl space-y-4">
+                    <div className="border-l-4 border-green-500 pl-4">
+                      <h4 className="text-lg font-bold text-green-400 mb-2">💰 Bahis Yapma</h4>
+                      <p>Sıranız geldiğinde bir bahis yapmalısınız. Bahis formatı: "X tane Y zarı" şeklindedir.</p>
+                      <p className="text-yellow-300 text-sm mt-2">
+                        Örnek: "3 tane 4 zarı" = Masada toplam <strong>EN AZ</strong> 3 tane 4 zarı olduğunu iddia ediyorsunuz.
+                      </p>
+                    </div>
+                    
+                    <div className="border-l-4 border-red-500 pl-4">
+                      <h4 className="text-lg font-bold text-red-400 mb-2">🤥 Blöf Yapma</h4>
+                      <p>Gerçekte olmayan bir durum hakkında bahis yapabilirsiniz. Diğer oyuncuları kandırmaya çalışın!</p>
+                    </div>
+                    
+                    <div className="border-l-4 border-orange-500 pl-4">
+                      <h4 className="text-lg font-bold text-orange-400 mb-2">⚔️ İtiraz Etme</h4>
+                      <p>Bir bahsin yanlış olduğunu düşünüyorsanız "itiraz et" butonuna tıklayabilirsiniz.</p>
+                      <p className="text-yellow-300 text-sm mt-2">
+                        İtiraz sonrası tüm zarlar açılır ve gerçek kontrol edilir
+                      </p>
+                    </div>
+                    
+                    <div className="border-l-4 border-purple-500 pl-4">
+                      <h4 className="text-lg font-bold text-purple-400 mb-2">🎯 SPOT ON!</h4>
+                      <p>Bir önceki oyuncunun bahsinin TAM OLARAK doğru olduğunu iddia edebilirsiniz.</p>
+                      <p className="text-yellow-300 text-sm mt-2">
+                        Eğer doğruysa, normal chiplerinin 3 katını kazanırsınız!
+                      </p>
+                      <p className="text-red-300 text-sm mt-1">
+                        Eğer yanlışsa, siz chip kaybedersiniz.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Bahis Kuralları */}
+                <section>
+                  <h3 className="text-2xl font-bold text-yellow-400 mb-4 flex items-center">
+                    📜 Bahis Kuralları
+                  </h3>
+                  <div className="bg-gray-800 p-4 rounded-xl space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-400 font-bold">1.</span>
+                      <p>Her yeni bahis bir öncekinden yüksek olmalı</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-400 font-bold">2.</span>
+                      <p>Aynı miktar zar ile daha yüksek değer seçebilirsiniz</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-400 font-bold">3.</span>
+                      <p>Daha çok zar ile herhangi bir değer seçebilirsiniz</p>
+                    </div>
+                    <div className="bg-blue-900 p-3 rounded-lg mt-4">
+                      <p className="text-blue-200 text-sm">
+                        💡 <strong>Örnek:</strong> Mevcut bahis "2 tane 3" ise, 
+                        sonraki bahis "2 tane 4" veya "3 tane 1" olabilir
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Kazanma */}
+                <section>
+                  <h3 className="text-2xl font-bold text-green-400 mb-4 flex items-center">
+                    🏆 Kazanma Koşulları
+                  </h3>
+                  <div className="bg-gray-800 p-4 rounded-xl space-y-3">
+                    <div className="border border-green-500 p-3 rounded-lg">
+                      <h4 className="font-bold text-green-400 mb-2">✅ Doğru İtiraz</h4>
+                      <p>Eğer itiraz ettiğiniz bahis gerçekten yanlışsa, bahis yapan oyuncu kaybeder.</p>
+                    </div>
+                    <div className="border border-red-500 p-3 rounded-lg">
+                      <h4 className="font-bold text-red-400 mb-2">❌ Yanlış İtiraz</h4>
+                      <p>Eğer itiraz ettiğiniz bahis gerçekten doğruysa, siz kaybedersiniz.</p>
+                    </div>
+                    <div className="bg-yellow-900 p-3 rounded-lg">
+                      <p className="text-yellow-200 text-sm">
+                        🎯 Sona kalan oyuncu oyunu kazanır!
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Kontroller */}
+                <section>
+                  <h3 className="text-2xl font-bold text-cyan-400 mb-4 flex items-center">
+                    🎮 Oyun Kontrolleri
+                  </h3>
+                  <div className="bg-gray-800 p-4 rounded-xl grid md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-green-600 px-3 py-1 rounded-lg font-bold text-sm">💰 Hızlı Bahis</div>
+                        <p className="text-sm">Bahis yapmak için</p>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-orange-600 px-3 py-1 rounded-lg font-bold text-sm">⚔️ İtiraz Et</div>
+                        <p className="text-sm">Mevcut bahise itiraz etmek için</p>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-purple-600 px-3 py-1 rounded-lg font-bold text-sm">🎯 SPOT ON!</div>
+                        <p className="text-sm">Mevcut bahisin tam doğru olduğunu iddia etmek için</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-blue-600 px-3 py-1 rounded-lg font-bold text-sm">💰 Bahis</div>
+                        <p className="text-sm">Normal (doğru) bahis</p>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-red-600 px-3 py-1 rounded-lg font-bold text-sm">🤥 Blöf</div>
+                        <p className="text-sm">Yanlış (bluff) bahis</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* İpuçları */}
+                <section>
+                  <h3 className="text-2xl font-bold text-pink-400 mb-4 flex items-center">
+                    💡 Strateji İpuçları
+                  </h3>
+                  <div className="bg-gradient-to-r from-pink-900 to-purple-900 p-4 rounded-xl space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-pink-400">🧠</span>
+                      <p>Kendi zarlarınızı iyi analiz edin - hangi sayıdan kaç tane var?</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-pink-400">🔍</span>
+                      <p>Diğer oyuncuların davranışlarını gözlemleyin.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-pink-400">⚖️</span>
+                      <p>Risk alın ama çok agresif olmayın.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-pink-400">🎭</span>
+                      <p>Bazen blöf yapmadan da kazanabilirsiniz!</p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              {/* Kapat butonu */}
+              <div className="mt-8 text-center">
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg transform hover:scale-105"
+                >
+                  🎲 Oyuna Dön
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bahis yerleştirme modal'ı */}
       {showBetPlacement && (

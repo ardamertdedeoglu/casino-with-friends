@@ -46,6 +46,7 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
   const onPlayerLeftRef = useRef<((player: { name: string }) => void) | null>(null);
   const onBetPlacedRef = useRef<((bet: { playerName: string; quantity: number; value: number; isBluff: boolean }) => void) | null>(null);
   const onChallengeResultRef = useRef<((result: { message: string }) => void) | null>(null);
+  const onSpotOnResultRef = useRef<((result: { message: string }) => void) | null>(null);
   const onRoundEndRef = useRef<((result: { winner: string; loser: string }) => void) | null>(null);
   const onChatMessageRef = useRef<((message: { id: string; name: string; message: string; timestamp: number }) => void) | null>(null);
 
@@ -133,6 +134,13 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
       }
     });
 
+    // Spot On sonuçları
+    socket.on('bluff-spot-on-result', (result) => {
+      if (onSpotOnResultRef.current) {
+        onSpotOnResultRef.current(result);
+      }
+    });
+
     // Tüm zarları göster (itiraz sonrası)
     socket.on('bluff-show-all-dice', (gameStateWithAllDice) => {
       console.log('🎲 Showing all dice after challenge:', gameStateWithAllDice);
@@ -198,6 +206,10 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
     onChallengeResultRef.current = callback;
   }, []);
 
+  const onSpotOnResult = useCallback((callback: (result: { message: string }) => void) => {
+    onSpotOnResultRef.current = callback;
+  }, []);
+
   const onRoundEnd = useCallback((callback: (result: { winner: string; loser: string }) => void) => {
     onRoundEndRef.current = callback;
   }, []);
@@ -207,7 +219,7 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
   }, []);
 
   // Aksiyon gönderme
-  const sendBluffAction = useCallback((actionType: 'raise' | 'bluff' | 'start-game', betData?: { quantity?: number; value?: number }) => {
+  const sendBluffAction = useCallback((actionType: 'raise' | 'bluff' | 'start-game' | 'spot-on', betData?: { quantity?: number; value?: number }) => {
     if (!socket || !isConnected) return;
 
     socket.emit('bluff-action', {
@@ -225,6 +237,7 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
       roomId
     });
   }, [socket, isConnected, roomId]);
+
 
   // Chat mesajı gönderme
   const sendChatMessage = useCallback((message: string) => {
@@ -249,6 +262,7 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
     onPlayerLeft,
     onBetPlaced,
     onChallengeResult,
+    onSpotOnResult,
     onRoundEnd,
     onChatMessage
   };
