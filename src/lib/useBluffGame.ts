@@ -202,11 +202,11 @@ export function useBluffGame(roomId: string, playerName: string, enableChat: boo
     onBetPlacedRef.current = callback;
   }, []);
 
-  const onChallengeResult = useCallback((callback: (result: { message: string }) => void) => {
+  const onChallengeResult = useCallback((callback: (result: { message: string; winner?: string; loser?: string; chipAmount?: number; }) => void) => {
     onChallengeResultRef.current = callback;
   }, []);
 
-  const onSpotOnResult = useCallback((callback: (result: { message: string }) => void) => {
+  const onSpotOnResult = useCallback((callback: (result: { message: string; winner?: string; loser?: string; chipAmount?: number; }) => void) => {
     onSpotOnResultRef.current = callback;
   }, []);
 

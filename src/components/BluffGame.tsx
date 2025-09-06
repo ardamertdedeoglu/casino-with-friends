@@ -61,6 +61,9 @@ interface PlayerJoinedData {
 
 interface ChallengeResultData {
   message: string;
+  winner?: string;
+  loser?: string;
+  chipAmount?: number;
 }
 
 interface RoundEndData {
@@ -84,6 +87,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
   const [betQuantity, setBetQuantity] = useState(1);
   const [betValue, setBetValue] = useState(1);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [playerScores, setPlayerScores] = useState<{[playerId: string]: number}>({});
 
   const { user } = useAuth();
   const { userProfile } = useVirtualCurrency();
@@ -102,6 +106,28 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
     onSpotOnResult,
     onRoundEnd
   } = useBluffGame(roomId, user?.user_metadata?.username || 'Oyuncu');
+
+  // Player score tracking function
+  const updatePlayerScore = useCallback((winnerName: string, loserName: string, chipAmount: number) => {
+    setPlayerScores(prevScores => {
+      const newScores = { ...prevScores };
+      
+      // Update winner (gain chips)
+      const winnerKey = players.find(p => p.name === winnerName)?.id;
+      if (winnerKey) {
+        newScores[winnerKey] = (newScores[winnerKey] || 0) + chipAmount;
+      }
+      
+      // Update loser (lose chips)
+      const loserKey = players.find(p => p.name === loserName)?.id;
+      if (loserKey) {
+        newScores[loserKey] = (newScores[loserKey] || 0) - chipAmount;
+      }
+      
+      console.log('🏆 Updated scores:', newScores);
+      return newScores;
+    });
+  }, [players]);
 
   // Oyuncuları güncelle
   const updatePlayers = useCallback((playerList: { id: string; name: string; chips: number; dice: number[]; isActive: boolean; isConnected: boolean; }[]) => {
@@ -204,6 +230,15 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
     onChallengeResult((result: ChallengeResultData) => {
       setMessage(result.message);
       setAllDiceVisible(true); // İtiraz sonuçlarını göstermek için tüm zarları aç
+      
+      // Update scores for challenge result (100 chips)
+      if (result.winner && result.loser && result.chipAmount) {
+        updatePlayerScore(result.winner, result.loser, result.chipAmount);
+      } else if (result.winner && result.loser) {
+        // Fallback to 100 chips if chipAmount not provided
+        updatePlayerScore(result.winner, result.loser, 100);
+      }
+      
       setTimeout(() => {
         setMessage('');
         setAllDiceVisible(false);
@@ -213,6 +248,15 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
     onSpotOnResult((result: ChallengeResultData) => {
       setMessage(result.message);
       setAllDiceVisible(true); // Spot On sonuçlarını göstermek için tüm zarları aç
+      
+      // Update scores for spot on result (always 300 chips)
+      if (result.winner && result.loser && result.chipAmount) {
+        updatePlayerScore(result.winner, result.loser, result.chipAmount);
+      } else if (result.winner && result.loser) {
+        // Fallback to 300 chips if chipAmount not provided (always 300 now)
+        updatePlayerScore(result.winner, result.loser, 300);
+      }
+      
       setTimeout(() => {
         setMessage('');
         setAllDiceVisible(false);
@@ -223,7 +267,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
       setMessage(`Tur bitti! ${result.winner} kazandı, ${result.loser} kaybetti`);
       setTimeout(() => setMessage(''), 5000);
     });
-  }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onSpotOnResult, onRoundEnd, updatePlayers, socketId]);
+  }, [onGameUpdate, onPlayerJoined, onPlayerLeft, onBetPlaced, onChallengeResult, onSpotOnResult, onRoundEnd, updatePlayers, socketId, updatePlayerScore]);
 
   // Bahis yerleştirme
   const handleBetPlaced = () => {
@@ -343,13 +387,13 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
     return positions[index];
   };
 
-  // Skor tablosu için
+  // Skor tablosu için - dinamik sıralama (en yüksek puan → en düşük puan)
   const scoreboardEntries = players.map(p => ({
     id: p.id,
     name: p.name,
-    netWinnings: 0, // Hesaplanacak
+    netWinnings: playerScores[p.id] || 0, // Use tracked scores instead of 0
     isDealer: p.id === currentPlayer
-  }));
+  })).sort((a, b) => b.netWinnings - a.netWinnings); // Sort by highest score first
 
   if (!user || !userProfile) {
     return (
@@ -463,7 +507,6 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
 
                   {/* Bahis Kontrolleri - Merkez (oyuncu sırasında) */}
                   {gamePhase === 'playing' && isMyTurn && (() => {
-                    console.log('🎲 Center betting controls rendered:', { gamePhase, isMyTurn, currentBet, showBettingInterface });
                     return (
                     <div className="bg-black bg-opacity-80 p-6 rounded-xl border-2 border-yellow-500 min-w-[280px]">
                       {/* Hızlı Bahis Arayüzü */}
@@ -609,7 +652,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                                 }
                                 setShowBettingInterface(true);
                               }}
-                              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg transform hover:scale-105"
+                              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 px-2 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg transform hover:scale-105"
                             >
                               💰 Hızlı Bahis
                             </button>
@@ -618,14 +661,14 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                               <>
                                 <button
                                   onClick={handleChallenge}
-                                  className="w-full bg-gradient-to-r from-orange-600 to-orange-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg transform hover:scale-105"
+                                  className="w-full bg-gradient-to-r from-orange-600 to-orange-700 text-white py-4 px-2 rounded-xl font-bold text-lg hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg transform hover:scale-105"
                                 >
                                   ⚔️ İtiraz Et
                                 </button>
                                 
                                 <button
                                   onClick={handleSpotOn}
-                                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-lg transform hover:scale-105"
+                                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-4 px-2 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-lg transform hover:scale-105"
                                 >
                                   🎯 SPOT ON!
                                 </button>

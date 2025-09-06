@@ -1226,9 +1226,9 @@ class BluffGame {
       console.log(`❌ SPOT ON wrong! ${actualCount} dice found (not exactly ${this.currentBet.quantity}), ${spotOnPlayer.name} loses`);
     }
 
-    // Chip transferi - Spot On başarılıysa 3x chip kazanır
+    // Chip transferi - Spot On her zaman 3x chip transferi yapar
     const baseAmount = 100; // Sabit bahis miktarı
-    const chipAmount = betExactlyCorrect ? baseAmount * 3 : baseAmount; // 3x chip if spot on correct
+    const chipAmount = baseAmount * 3; // Her zaman 3x chip (300) - doğru veya yanlış fark etmez
     
     loser.chips -= chipAmount;
     winner.chips += chipAmount;

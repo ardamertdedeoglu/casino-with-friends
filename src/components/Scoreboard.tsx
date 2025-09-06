@@ -36,16 +36,17 @@ export default function Scoreboard({ scoreboard, className = '' }: ScoreboardPro
             className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all duration-300 ${
               entry.isDealer
                 ? 'bg-gradient-to-r from-red-900 to-red-800 border-red-500 shadow-lg'
-                : index === 0 && scoreboard.length > 1
+                : index === 0 && entry.netWinnings > 0 && scoreboard.length > 1
                   ? 'bg-gradient-to-r from-yellow-900 to-yellow-800 border-yellow-500 shadow-lg animate-pulse'
                   : 'bg-gradient-to-r from-gray-700 to-gray-600 border-gray-500'
             }`}
+            title={`${entry.name}: #${index + 1} sırada - ${entry.netWinnings > 0 ? '+' : ''}${entry.netWinnings} chip net değişim`}
           >
             <div className="flex items-center space-x-2">
               <span className={`text-sm font-bold px-2 py-1 rounded-full ${
                 entry.isDealer
                   ? 'bg-red-600 text-white'
-                  : index === 0 && scoreboard.length > 1
+                  : index === 0 && entry.netWinnings > 0 && scoreboard.length > 1
                     ? 'bg-yellow-600 text-black'
                     : 'bg-gray-600 text-white'
               }`}>
@@ -77,6 +78,10 @@ export default function Scoreboard({ scoreboard, className = '' }: ScoreboardPro
       <div className="mt-3 pt-3 border-t border-gray-600">
         <p className="text-xs text-gray-400 text-center">
           <span className="text-green-400">+ Yeşil:</span> Net kazanç • <span className="text-red-400">- Kırmızı:</span> Net kayıp
+          <br />
+          <span className="text-yellow-300">İtiraz: ±100 chip • Spot On: ±300 chip</span>
+          <br />
+          <span className="text-blue-300">Sıralama: Net puana göre dinamik</span>
         </p>
       </div>
     </div>
