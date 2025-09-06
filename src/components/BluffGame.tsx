@@ -1091,7 +1091,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                     
                     <div className="border-l-4 border-orange-500 pl-4">
                       <h4 className="text-lg font-bold text-orange-400 mb-2">⚔️ İtiraz Etme</h4>
-                      <p>Bir bahsin yanlış olduğunu düşünüyorsanız "itiraz et" butonuna tıklayabilirsiniz.</p>
+                      <p>Bir bahsin yanlış olduğunu düşünüyorsanız &quout;itiraz et&quot; butonuna tıklayabilirsiniz.</p>
                       <p className="text-yellow-300 text-sm mt-2">
                         İtiraz sonrası tüm zarlar açılır ve gerçek kontrol edilir
                       </p>
@@ -1130,8 +1130,8 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                     </div>
                     <div className="bg-blue-900 p-3 rounded-lg mt-4">
                       <p className="text-blue-200 text-sm">
-                        💡 <strong>Örnek:</strong> Mevcut bahis "2 tane 3" ise, 
-                        sonraki bahis "2 tane 4" veya "3 tane 1" olabilir
+                        💡 <strong>Örnek:</strong> Mevcut bahis &quot;2 tane 3&quot; ise, 
+                        sonraki bahis "&quot; tane 4&quot;veya "&quot; tane 1&quot; olabilir\r
                       </p>
                     </div>
                   </div>
