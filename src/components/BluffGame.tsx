@@ -1078,9 +1078,9 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                   <div className="bg-gray-800 p-4 rounded-xl space-y-4">
                     <div className="border-l-4 border-green-500 pl-4">
                       <h4 className="text-lg font-bold text-green-400 mb-2">💰 Bahis Yapma</h4>
-                      <p>Sıranız geldiğinde bir bahis yapmalısınız. Bahis formatı: "X tane Y zarı" şeklindedir.</p>
+                      <p>Sıranız geldiğinde bir bahis yapmalısınız. Bahis formatı: &quot;X tane Y zarı&quot; şeklindedir.</p>
                       <p className="text-yellow-300 text-sm mt-2">
-                        Örnek: "3 tane 4 zarı" = Masada toplam <strong>EN AZ</strong> 3 tane 4 zarı olduğunu iddia ediyorsunuz.
+                        Örnek: &quot;3 tane 4 zarı&quot; = Masada toplam <strong>EN AZ</strong> 3 tane 4 zarı olduğunu iddia ediyorsunuz.
                       </p>
                     </div>
                     
@@ -1131,7 +1131,7 @@ export default function BluffGame({ roomId, gameRoom: initialGameRoom }: BluffGa
                     <div className="bg-blue-900 p-3 rounded-lg mt-4">
                       <p className="text-blue-200 text-sm">
                         💡 <strong>Örnek:</strong> Mevcut bahis &quot;2 tane 3&quot; ise, 
-                        sonraki bahis "&quot; tane 4&quot;veya "&quot; tane 1&quot; olabilir\r
+                        sonraki bahis &quot;tane 4&quot; veya &quot;tane 1&quot; olabilir\r
                       </p>
                     </div>
                   </div>
