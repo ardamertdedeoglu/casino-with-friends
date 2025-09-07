@@ -15,13 +15,13 @@ export default function Home() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showChipDeposit, setShowChipDeposit] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [gameType, setGameType] = useState<'blackjack' | 'bluff'>('blackjack');
+  const [gameType, setGameType] = useState<'blackjack' | 'bluff' | 'okey'>('blackjack');
   const router = useRouter();
 
   const { user, loading, signOut } = useAuth();
   const { userProfile, loading: currencyLoading } = useVirtualCurrency();
 
-  const handleGameClick = (e: React.MouseEvent, type: 'blackjack' | 'bluff') => {
+  const handleGameClick = (e: React.MouseEvent, type: 'blackjack' | 'bluff' | 'okey') => {
     e.preventDefault();
 
     // Kullanıcı giriş yapmamışsa uyarı göster
@@ -34,6 +34,9 @@ export default function Home() {
     if (type === 'bluff') {
       // Blöf için doğrudan /bluff adresine yönlendir
       router.push('/bluff');
+    } else if (type === 'okey') {
+      // Okey için doğrudan /okey adresine yönlendir
+      router.push('/okey');
     } else {
       // Blackjack için oda seçimi göster
       setGameType(type);
@@ -147,7 +150,7 @@ export default function Home() {
           >
             <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
               <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-                🎯 {gameType === 'bluff' ? 'Blöf' : 'Blackjack'} Oda Seçimi
+                🎯 {gameType === 'bluff' ? 'Blöf' : gameType === 'okey' ? 'Okey' : 'Blackjack'} Oda Seçimi
               </h3>
               <div className="space-y-4">
                 <div>
@@ -234,14 +237,25 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Poker - Coming Soon */}
-          <div className="bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 p-8 rounded-3xl shadow-2xl border-4 border-gray-400 opacity-75">
-            <div className="text-center">
-              <div className="text-8xl mb-4 text-gray-500">🃏</div>
-              <h2 className="text-3xl font-bold text-gray-600 mb-2">POKER</h2>
-              <p className="text-gray-500 mb-4">En iyi eli yakala!</p>
-              <div className="bg-gray-500 text-white px-6 py-3 rounded-full font-bold text-lg">
-                YAKINDA
+          {/* Okey */}
+          <div onClick={(e) => handleGameClick(e, 'okey')} className="group cursor-pointer relative">
+            {!user && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 rounded-3xl flex items-center justify-center z-10">
+                <div className="text-center text-white">
+                  <div className="text-4xl mb-2">🔒</div>
+                  <p className="font-bold">Giriş Yapın</p>
+                  <p className="text-sm">Oynamak için hesap gerekli</p>
+                </div>
+              </div>
+            )}
+            <div className="bg-gradient-to-br from-orange-50 via-white to-red-100 p-8 rounded-3xl shadow-2xl border-4 border-orange-400 hover:border-orange-300 transform hover:-translate-y-4 transition-all duration-300 hover:shadow-3xl">
+              <div className="text-center">
+                <div className="text-8xl mb-4 group-hover:animate-bounce">🎴</div>
+                <h2 className="text-3xl font-bold text-gray-800 mb-2">101 OKEY</h2>
+                <p className="text-gray-600 mb-4">Türk klasiği taş oyunu!</p>
+                <div className="bg-orange-600 text-white px-6 py-3 rounded-full font-bold text-lg hover:bg-orange-700 transition-colors">
+                  {user ? 'OYNA' : '🔑 GİRİŞ YAP'}
+                </div>
               </div>
             </div>
           </div>

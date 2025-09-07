@@ -949,6 +949,828 @@ class BlackjackGame {
 }
 
 // Blöf (Liar's Dice) game logic
+// 101 Okey game logic
+class OkeyGame {
+  constructor(roomId, io, settings = {}) {
+    this.roomId = roomId;
+    this.io = io;
+    this.players = new Map();
+    this.settings = {
+      gameMode: settings.gameMode || 'folding', // folding or nonfolding
+      playType: settings.playType || 'single', // single or paired
+      maxPlayers: settings.playType === 'paired' ? 4 : 4,
+      ...settings
+    };
+    
+    // Game state
+    this.gameState = 'waiting';
+    this.currentPlayer = null;
+    this.roundNumber = 1;
+    this.tiles = [];
+    this.discardPile = []; // Legacy single discard pile
+    this.playerDiscardPiles = new Map(); // Individual player discard piles
+    this.okeyTile = null;
+    this.indicatorTile = null;
+    this.fakeOkeyTiles = []; // The two fake Okey tiles
+    this.roomOwner = null;
+    this.currentDebt = 1; // Starting debt for folding games
+    this.pendingFold = null; // Current fold proposal
+    
+    // Player partnerships for paired games
+    this.partnerships = new Map(); // playerId -> partnerId
+    
+    // Game scoring
+    this.scores = new Map(); // playerId -> total score
+    this.roundScores = new Map(); // playerId -> current round score
+    
+    console.log(`🎴 Created new OkeyGame for room ${roomId}`);
+  }
+
+  // Create a complete set of Okey tiles (106 tiles - Turkish rules)
+  createTileSet() {
+    const tiles = [];
+    const colors = ['red', 'black', 'blue', 'yellow'];
+    
+    // Add numbered tiles (1-13) for each color, two sets (104 tiles)
+    for (let set = 0; set < 2; set++) {
+      for (const color of colors) {
+        for (let number = 1; number <= 13; number++) {
+          tiles.push({
+            color,
+            number,
+            isOkey: false,
+            isFakeOkey: false,
+            id: `${color}-${number}-${set}`,
+          });
+        }
+      }
+    }
+    
+    // Add 2 fake Okey tiles (sahte okey) - total 106 tiles
+    tiles.push({
+      color: 'red',
+      number: 14,
+      isOkey: false,
+      isFakeOkey: true,
+      id: 'fake-okey-1',
+    });
+    tiles.push({
+      color: 'black',
+      number: 14,
+      isOkey: false,
+      isFakeOkey: true,
+      id: 'fake-okey-2',
+    });
+    
+    return this.shuffleTiles(tiles);
+  }
+
+  // Shuffle tiles array
+  shuffleTiles(tiles) {
+    const shuffled = [...tiles];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  // Determine okey tile based on indicator
+  determineOkey(indicatorTile) {
+    if (!indicatorTile) return null;
+    
+    let okeyNumber, okeyColor;
+    
+    if (indicatorTile.number === 13) {
+      okeyNumber = 1;
+      okeyColor = indicatorTile.color;
+    } else {
+      okeyNumber = indicatorTile.number + 1;
+      okeyColor = indicatorTile.color;
+    }
+    
+    return { color: okeyColor, number: okeyNumber };
+  }
+
+  // Add player to game
+  addPlayer(playerId, name) {
+    if (this.players.size >= this.settings.maxPlayers) {
+      return false;
+    }
+    
+    if (!this.roomOwner) {
+      this.roomOwner = playerId;
+    }
+    
+    this.players.set(playerId, {
+      id: playerId,
+      name,
+      tiles: [],
+      chips: 1000, // Default starting chips
+      score: 0, // Total cumulative score
+      roundScore: 0, // Score for current round
+      debt: 0, // Current debt in folding games
+      foldMultiplier: 1,
+      hasOpened: false, // Has opened with 101+ points
+      canFinish: false, // Can finish the game
+      openedSets: [], // Sets that player has opened
+      discardedTiles: [], // Individual discard pile for this player
+      isActive: false,
+      isConnected: true,
+      isDealer: false, // Is the dealer for this round
+      position: this.players.size,
+      tileCount: 0 // For display to other players
+    });
+    
+    this.scores.set(playerId, 0);
+    this.roundScores.set(playerId, 0);
+    this.playerDiscardPiles.set(playerId, []); // Initialize empty discard pile for player
+    
+    console.log(`🎴 Player ${name} (${playerId}) added to Okey room ${this.roomId}`);
+    return true;
+  }
+
+  // Remove player from game
+  removePlayer(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    console.log(`🎴 Removing player ${player.name} from Okey room ${this.roomId}`);
+    
+    this.players.delete(playerId);
+    this.scores.delete(playerId);
+    this.roundScores.delete(playerId);
+    this.playerDiscardPiles.delete(playerId); // Clean up discard pile
+    
+    // Remove from partnerships if paired game
+    if (this.partnerships.has(playerId)) {
+      const partnerId = this.partnerships.get(playerId);
+      this.partnerships.delete(partnerId);
+      this.partnerships.delete(playerId);
+    }
+    
+    // If current player left, move to next
+    if (this.currentPlayer === playerId) {
+      this.nextPlayer();
+    }
+    
+    // If room owner left, assign new owner
+    if (this.roomOwner === playerId && this.players.size > 0) {
+      this.roomOwner = Array.from(this.players.keys())[0];
+    }
+    
+    return true;
+  }
+
+  // Start a new game
+  startGame() {
+    if (this.players.size < 2) {
+      console.log(`🎴 Cannot start Okey game: need at least 2 players`);
+      return false;
+    }
+    
+    if (this.gameState === 'playing') {
+      console.log(`🎴 Okey game already in progress in room ${this.roomId}`);
+      return false;
+    }
+    
+    console.log(`🎴 Starting Okey game in room ${this.roomId}`);
+    
+    // Setup partnerships for paired games
+    if (this.settings.playType === 'paired' && this.players.size === 4) {
+      this.setupPartnerships();
+    }
+    
+    // Create and shuffle tiles
+    this.tiles = this.createTileSet();
+    
+    // Deal tiles
+    this.dealTiles();
+    
+    // Set game state
+    this.gameState = 'playing';
+    
+    // Set first player
+    const playerIds = Array.from(this.players.keys());
+    this.currentPlayer = playerIds[0];
+    
+    // Mark current player as active
+    this.players.get(this.currentPlayer).isActive = true;
+    
+    this.broadcastGameState();
+    return true;
+  }
+
+  // Setup partnerships for paired games
+  setupPartnerships() {
+    const playerIds = Array.from(this.players.keys());
+    if (playerIds.length === 4) {
+      // Players 0&2 are partners, Players 1&3 are partners
+      this.partnerships.set(playerIds[0], playerIds[2]);
+      this.partnerships.set(playerIds[2], playerIds[0]);
+      this.partnerships.set(playerIds[1], playerIds[3]);
+      this.partnerships.set(playerIds[3], playerIds[1]);
+      
+      console.log(`🎴 Partnerships set up: ${playerIds[0]}&${playerIds[2]} vs ${playerIds[1]}&${playerIds[3]}`);
+    }
+  }
+
+  // Deal tiles to players (Turkish 101 Okey rules)
+  dealTiles() {
+    // In 101 Okey: each player gets 21 tiles, except dealer gets 22
+    const playerIds = Array.from(this.players.keys());
+    let tileIndex = 0;
+    
+    // Deal 21 tiles to each player
+    for (let round = 0; round < 21; round++) {
+      for (const playerId of playerIds) {
+        if (tileIndex < this.tiles.length) {
+          this.players.get(playerId).tiles.push(this.tiles[tileIndex]);
+          tileIndex++;
+        }
+      }
+    }
+    
+    // Dealer (first player) gets one extra tile (22 total)
+    if (tileIndex < this.tiles.length) {
+      this.players.get(playerIds[0]).tiles.push(this.tiles[tileIndex]);
+      tileIndex++;
+      // Mark dealer
+      this.players.get(playerIds[0]).isDealer = true;
+    }
+    
+    // Remove dealt tiles from the deck
+    this.tiles = this.tiles.slice(tileIndex);
+    
+    // Draw indicator tile and determine okey
+    if (this.tiles.length > 0) {
+      this.indicatorTile = this.tiles.pop();
+      const okeyDefinition = this.determineOkey(this.indicatorTile);
+      this.okeyTile = okeyDefinition;
+      
+      // Mark okey tiles in all hands
+      this.markOkeyTiles(okeyDefinition);
+      
+      // Set fake okey tiles
+      this.fakeOkeyTiles = this.tiles.filter(tile => tile.isFakeOkey);
+    }
+    
+    console.log(`🎴 Dealt 21-22 tiles to ${playerIds.length} players. Indicator: ${this.indicatorTile?.color} ${this.indicatorTile?.number}`);
+    console.log(`🎯 Okey tile: ${this.okeyTile?.color} ${this.okeyTile?.number}`);
+  }
+
+  // Mark tiles that are okey in all player hands
+  markOkeyTiles(okeyDefinition) {
+    if (!okeyDefinition) return;
+    
+    for (const player of this.players.values()) {
+      for (const tile of player.tiles) {
+        if (tile.color === okeyDefinition.color && tile.number === okeyDefinition.number) {
+          tile.isOkey = true;
+        }
+      }
+    }
+  }
+
+  // Draw tile from deck
+  drawTile(playerId) {
+    if (this.currentPlayer !== playerId) {
+      console.log(`🎴 ${playerId} tried to draw but it's not their turn`);
+      return false;
+    }
+    
+    if (this.tiles.length === 0) {
+      console.log(`🎴 No more tiles to draw`);
+      return false;
+    }
+    
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    const tile = this.tiles.pop();
+    player.tiles.push(tile);
+    
+    console.log(`🎴 Player ${player.name} drew a tile`);
+    
+    // Send updated tiles to player
+    this.io.to(playerId).emit('okey-player-tiles', player.tiles);
+    
+    // Broadcast tile drawn event
+    this.io.to(this.roomId).emit('okey-tile-drawn', {
+      playerName: player.name,
+      remainingTiles: this.tiles.length
+    });
+    
+    return true;
+  }
+
+  // Draw tile from discard pile
+  drawFromDiscard(playerId) {
+    if (this.currentPlayer !== playerId) {
+      console.log(`🎴 ${playerId} tried to draw from discard but it's not their turn`);
+      return false;
+    }
+    
+    if (this.discardPile.length === 0) {
+      console.log(`🎴 No tiles in discard pile`);
+      return false;
+    }
+    
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    const tile = this.discardPile.pop(); // Take the last discarded tile
+    player.tiles.push(tile);
+    
+    console.log(`🎴 Player ${player.name} drew from discard pile: ${tile.color} ${tile.number}`);
+    
+    // Send updated tiles to player
+    this.io.to(playerId).emit('okey-player-tiles', player.tiles);
+    
+    // Broadcast discard pile update
+    this.broadcastGameState();
+    
+    return true;
+  }
+  
+  // Draw tile from specific player's discard pile
+  drawFromPlayerDiscard(playerId, targetPlayerId) {
+    if (this.currentPlayer !== playerId) {
+      console.log(`🎴 ${playerId} tried to draw from player discard but it's not their turn`);
+      return false;
+    }
+    
+    const player = this.players.get(playerId);
+    const targetPlayer = this.players.get(targetPlayerId);
+    
+    if (!player || !targetPlayer) return false;
+    
+    // Ensure target player has discardedTiles array
+    if (!targetPlayer.discardedTiles) {
+      targetPlayer.discardedTiles = [];
+    }
+    
+    if (targetPlayer.discardedTiles.length === 0) {
+      console.log(`🎴 No tiles in ${targetPlayer.name}'s discard pile`);
+      return false;
+    }
+    
+    const tile = targetPlayer.discardedTiles.pop(); // Take the last discarded tile
+    player.tiles.push(tile);
+    
+    console.log(`🎴 Player ${player.name} drew from ${targetPlayer.name}'s discard pile: ${tile.color} ${tile.number}`);
+    
+    // Send updated tiles to player
+    this.io.to(playerId).emit('okey-player-tiles', player.tiles);
+    
+    // Broadcast discard pile update
+    this.broadcastGameState();
+    
+    return true;
+  }
+  // Discard tile
+  discardTile(playerId, tileId) {
+    if (this.currentPlayer !== playerId) {
+      console.log(`🎴 ${playerId} tried to discard but it's not their turn`);
+      return false;
+    }
+    
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    const tileIndex = player.tiles.findIndex(tile => tile.id === tileId);
+    if (tileIndex === -1) {
+      console.log(`🎴 Player ${player.name} doesn't have tile ${tileId}`);
+      return false;
+    }
+    
+    const discardedTile = player.tiles.splice(tileIndex, 1)[0];
+    
+    // Ensure player has discardedTiles array (backward compatibility)
+    if (!player.discardedTiles) {
+      player.discardedTiles = [];
+    }
+    
+    // Add to player's individual discard pile
+    player.discardedTiles.push(discardedTile);
+    
+    // Also add to legacy central discard pile for backward compatibility
+    this.discardPile.push(discardedTile);
+    
+    console.log(`🎴 Player ${player.name} discarded ${discardedTile.color} ${discardedTile.number} (individual pile: ${player.discardedTiles.length}, central pile: ${this.discardPile.length})`);
+    
+    // Send updated tiles to player
+    this.io.to(playerId).emit('okey-player-tiles', player.tiles);
+    
+    // Broadcast tile discarded event
+    this.io.to(this.roomId).emit('okey-tile-discarded', {
+      playerName: player.name,
+      tile: discardedTile
+    });
+    
+    // Move to next player
+    this.nextPlayer();
+    this.broadcastGameState();
+    
+    return true;
+  }
+
+  // Move to next player
+  nextPlayer() {
+    const playerIds = Array.from(this.players.keys());
+    const currentIndex = playerIds.indexOf(this.currentPlayer);
+    const nextIndex = (currentIndex + 1) % playerIds.length;
+    
+    // Deactivate current player
+    if (this.currentPlayer) {
+      this.players.get(this.currentPlayer).isActive = false;
+    }
+    
+    // Activate next player
+    this.currentPlayer = playerIds[nextIndex];
+    this.players.get(this.currentPlayer).isActive = true;
+    
+    console.log(`🎴 Turn moved to player ${this.players.get(this.currentPlayer).name}`);
+  }
+
+  // Open sets on the table
+  openSets(playerId, sets) {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    // Validate sets
+    for (const set of sets) {
+      if (!this.isValidSet(set) && !this.isValidRun(set)) {
+        console.log(`🎴 Invalid set/run from player ${player.name}`);
+        return false;
+      }
+    }
+    
+    // Calculate score
+    const setScore = this.calculateSetsScore(sets);
+    
+    // Check if player can open (101+ points)
+    if (!player.hasOpened && setScore < 101) {
+      console.log(`🎴 Player ${player.name} cannot open: only ${setScore} points (need 101+)`);
+      return false;
+    }
+    
+    // Remove tiles from player's hand
+    for (const set of sets) {
+      for (const tile of set) {
+        const tileIndex = player.tiles.findIndex(t => t.id === tile.id);
+        if (tileIndex !== -1) {
+          player.tiles.splice(tileIndex, 1);
+        }
+      }
+    }
+    
+    // Add to opened sets
+    player.openedSets.push(...sets);
+    player.hasOpened = true;
+    
+    console.log(`🎴 Player ${player.name} opened sets worth ${setScore} points`);
+    
+    // Send updated tiles to player
+    this.io.to(playerId).emit('okey-player-tiles', player.tiles);
+    
+    // Broadcast set opened event
+    this.io.to(this.roomId).emit('okey-set-opened', {
+      playerName: player.name,
+      sets: sets,
+      score: setScore
+    });
+    
+    return true;
+  }
+
+  // Check if tiles form a valid set (same number, different colors)
+  isValidSet(tiles) {
+    if (tiles.length < 3 || tiles.length > 4) return false;
+    
+    const number = tiles[0].number;
+    const colors = new Set();
+    
+    for (const tile of tiles) {
+      if (tile.number !== number && !tile.isOkey && tile.number !== 14) return false;
+      if (!tile.isOkey && tile.number !== 14 && colors.has(tile.color)) return false;
+      colors.add(tile.color);
+    }
+    
+    return true;
+  }
+
+  // Check if tiles form a valid run (sequence)
+  isValidRun(tiles) {
+    if (tiles.length < 3) return false;
+    
+    // Sort tiles by number (handle okeys/jokers separately)
+    const sorted = tiles.sort((a, b) => {
+      if (a.isOkey || a.number === 14) return 1;
+      if (b.isOkey || b.number === 14) return -1;
+      return a.number - b.number;
+    });
+    
+    // Check if all tiles are same color and consecutive numbers
+    // (This is simplified - full implementation would handle okeys/jokers)
+    const color = sorted[0].color;
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].color !== color) return false;
+      if (sorted[i + 1].number !== sorted[i].number + 1) {
+        // Check if next tile is okey/joker
+        if (!sorted[i + 1].isOkey && sorted[i + 1].number !== 14) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+
+  // Calculate score for sets (Turkish 101 Okey scoring)
+  calculateSetsScore(sets) {
+    let totalScore = 0;
+    
+    for (const set of sets) {
+      for (const tile of set) {
+        if (tile.isFakeOkey) {
+          totalScore += 50; // Fake Okey = 50 points
+        } else if (tile.isOkey) {
+          totalScore += 50; // Real Okey = 50 points
+        } else {
+          totalScore += tile.number; // All numbered tiles (1-13) = face value
+        }
+      }
+    }
+    
+    return totalScore;
+  }
+
+  // Folding system for debt management (Turkish 101 Okey)
+  proposeFold(playerId, multiplier) {
+    if (this.settings.gameMode !== 'folding') {
+      console.log(`🎴 Folding not allowed in ${this.settings.gameMode} mode`);
+      return false;
+    }
+    
+    const player = this.players.get(playerId);
+    if (!player || this.gameState !== 'playing') return false;
+    
+    // Only allow folding on player's turn
+    if (this.currentPlayer !== playerId) {
+      console.log(`🎴 Player ${player.name} cannot fold: not their turn`);
+      return false;
+    }
+    
+    // Valid multipliers: 2, 4, 8, etc.
+    if (![2, 4, 8, 16].includes(multiplier)) {
+      console.log(`🎴 Invalid fold multiplier: ${multiplier}`);
+      return false;
+    }
+    
+    // Cannot propose same or lower multiplier
+    if (multiplier <= this.currentDebt) {
+      console.log(`🎴 Fold multiplier must be higher than current debt: ${this.currentDebt}`);
+      return false;
+    }
+    
+    console.log(`🎴 Player ${player.name} proposes fold with multiplier ${multiplier}`);
+    
+    // Broadcast fold proposal to all players
+    this.io.to(this.roomId).emit('okey-fold-proposed', {
+      playerName: player.name,
+      multiplier: multiplier,
+      currentDebt: this.currentDebt
+    });
+    
+    // Set pending fold
+    this.pendingFold = {
+      proposerId: playerId,
+      multiplier: multiplier,
+      responses: new Map(), // playerId -> accept/reject
+      timeout: Date.now() + 30000 // 30 second timeout
+    };
+    
+    return true;
+  }
+  
+  // Respond to fold proposal
+  respondToFold(playerId, accept) {
+    if (!this.pendingFold) {
+      console.log(`🎴 No pending fold to respond to`);
+      return false;
+    }
+    
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    // Cannot respond to own proposal
+    if (playerId === this.pendingFold.proposerId) {
+      console.log(`🎴 Player cannot respond to own fold proposal`);
+      return false;
+    }
+    
+    // Check timeout
+    if (Date.now() > this.pendingFold.timeout) {
+      console.log(`🎴 Fold proposal timed out`);
+      this.pendingFold = null;
+      return false;
+    }
+    
+    this.pendingFold.responses.set(playerId, accept);
+    console.log(`🎴 Player ${player.name} ${accept ? 'accepted' : 'rejected'} fold`);
+    
+    // Check if all players have responded
+    const requiredResponses = this.players.size - 1; // Exclude proposer
+    if (this.pendingFold.responses.size >= requiredResponses) {
+      this.processFoldResult();
+    }
+    
+    return true;
+  }
+  
+  // Process fold result
+  processFoldResult() {
+    if (!this.pendingFold) return;
+    
+    const allAccepted = Array.from(this.pendingFold.responses.values()).every(response => response);
+    
+    if (allAccepted) {
+      // Apply fold to all players
+      this.currentDebt = this.pendingFold.multiplier;
+      
+      for (const player of this.players.values()) {
+        player.foldMultiplier = this.pendingFold.multiplier;
+        player.debt = this.currentDebt;
+      }
+      
+      console.log(`🎴 Fold accepted! New debt multiplier: ${this.currentDebt}`);
+      
+      this.io.to(this.roomId).emit('okey-fold-accepted', {
+        multiplier: this.currentDebt,
+        message: `Katlama kabul edildi! Borç katlandı: x${this.currentDebt}`
+      });
+    } else {
+      console.log(`🎴 Fold rejected`);
+      
+      this.io.to(this.roomId).emit('okey-fold-rejected', {
+        message: 'Katlama reddedildi'
+      });
+    }
+    
+    // Clear pending fold
+    this.pendingFold = null;
+    this.broadcastGameState();
+  }
+
+  // Finish game
+  finishGame(playerId, winningTiles = []) {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    
+    if (!player.hasOpened) {
+      console.log(`🎴 Player ${player.name} cannot finish: hasn't opened yet`);
+      return false;
+    }
+    
+    // Player must have 1 remaining tile to finish
+    if (player.tiles.length !== 1) {
+      console.log(`🎴 Player ${player.name} cannot finish: has ${player.tiles.length} tiles (need exactly 1)`);
+      return false;
+    }
+    
+    this.gameState = 'finished';
+    
+    // Calculate final scores
+    this.calculateFinalScores(playerId);
+    
+    console.log(`🎴 Game finished! Winner: ${player.name}`);
+    
+    // Broadcast game finished event
+    this.io.to(this.roomId).emit('okey-game-finished', {
+      winner: player.name,
+      scores: Object.fromEntries(this.scores)
+    });
+    
+    this.broadcastGameState();
+    return true;
+  }
+
+  // Calculate final scores for the round (Turkish 101 Okey rules)
+  calculateFinalScores(winnerId) {
+    const winner = this.players.get(winnerId);
+    if (!winner) return;
+    
+    // Check if winner finished with Okey
+    const finishedWithOkey = winner.tiles.length === 1 && 
+      (winner.tiles[0].isOkey || winner.tiles[0].isFakeOkey);
+    
+    // Calculate points for remaining tiles
+    for (const [playerId, player] of this.players) {
+      let penalty = 0;
+      
+      if (playerId !== winnerId) {
+        // Calculate penalty for remaining tiles using Turkish scoring
+        for (const tile of player.tiles) {
+          if (tile.isFakeOkey) {
+            penalty += 50; // Fake Okey = 50 points
+          } else if (tile.isOkey) {
+            penalty += 50; // Real Okey = 50 points
+          } else {
+            penalty += tile.number; // All numbered tiles (1-13) = face value
+          }
+        }
+        
+        // Double penalty if player hasn't opened (Turkish rule)
+        if (!player.hasOpened) {
+          penalty *= 2;
+        }
+        
+        // Apply fold multiplier for folding games
+        if (this.settings.gameMode === 'folding') {
+          penalty *= player.foldMultiplier;
+        }
+      } else {
+        // Winner gets bonus if finished with Okey
+        penalty = finishedWithOkey ? -101 : 0; // 101 point bonus
+      }
+      
+      this.roundScores.set(playerId, penalty);
+      const totalScore = this.scores.get(playerId) + penalty;
+      this.scores.set(playerId, totalScore);
+      
+      console.log(`🎴 Player ${player.name}: ${penalty > 0 ? '+' : ''}${penalty} points (total: ${totalScore})`);
+    }
+  }
+
+  // Get game state for clients
+  getGameState() {
+    const players = [];
+    for (const [playerId, player] of this.players) {
+      // Ensure discardedTiles property exists (backward compatibility)
+      if (!player.discardedTiles) {
+        player.discardedTiles = [];
+      }
+      
+      players.push({
+        id: playerId,
+        name: player.name,
+        chips: player.chips,
+        tileCount: player.tiles.length,
+        score: this.scores.get(playerId) || 0,
+        roundScore: this.roundScores.get(playerId) || 0,
+        debt: player.debt || 0,
+        foldMultiplier: player.foldMultiplier,
+        partner: this.partnerships.get(playerId),
+        hasOpened: player.hasOpened,
+        canFinish: player.canFinish,
+        openedSets: player.openedSets,
+        discardedTiles: player.discardedTiles || [], // Individual discard pile
+        isActive: player.isActive,
+        isConnected: player.isConnected,
+        isDealer: player.isDealer || false,
+        position: player.position
+      });
+    }
+    
+    return {
+      roomId: this.roomId,
+      players,
+      currentPlayer: this.currentPlayer,
+      gamePhase: this.gameState,
+      okeyTile: this.okeyTile,
+      indicatorTile: this.indicatorTile,
+      fakeOkeyTiles: this.fakeOkeyTiles || [],
+      discardPile: this.discardPile,
+      remainingTiles: this.tiles.length,
+      roundNumber: this.roundNumber,
+      gameMode: this.settings.gameMode,
+      playType: this.settings.playType,
+      scores: Object.fromEntries(this.scores),
+      roundScores: Object.fromEntries(this.roundScores),
+      partnerships: this.partnerships ? Object.fromEntries(this.partnerships) : {},
+      currentDebt: this.currentDebt || 1,
+      gameSettings: {
+        targetScore: 101,
+        maxRounds: 16,
+        dealerRotation: true
+      }
+    };
+  }
+
+  // Broadcast game state to all players
+  broadcastGameState() {
+    const gameState = this.getGameState();
+    this.io.to(this.roomId).emit('okey-game-update', gameState);
+    
+    // Send individual tile data to each player
+    for (const [playerId, player] of this.players) {
+      this.io.to(playerId).emit('okey-player-tiles', player.tiles);
+    }
+  }
+}
+
+// Bluff game logic
 class BluffGame {
   constructor(roomId, io, settings = {}) {
     this.roomId = roomId;
@@ -1887,6 +2709,206 @@ app.prepare().then(() => {
       }
     });
 
+    // 101 Okey oyun event'leri
+    socket.on('join-okey-room', (data) => {
+      const { roomId, playerName, gameType } = data;
+      console.log(`🎴 Player ${playerName} (${socket.id}) joining okey room ${roomId}`);
+      socket.join(roomId);
+
+      // Okey oyun odası oluştur veya mevcut olanı al
+      if (!gameRooms.has(roomId)) {
+        gameRooms.set(roomId, new OkeyGame(roomId, io));
+        console.log(`🆕 Created new okey game room: ${roomId}`);
+      }
+
+      const game = gameRooms.get(roomId);
+      
+      // Make sure this is an OkeyGame
+      if (!(game instanceof OkeyGame)) {
+        console.log(`❌ Room ${roomId} is not an Okey game, it's a ${game.constructor.name}`);
+        socket.emit('okey-join-error', { message: 'Bu oda 101 Okey oyunu için değil' });
+        return;
+      }
+      
+      console.log(`🎴 Current players in okey room ${roomId}: ${game.players.size}`);
+
+      // Oyuncuyu ekle
+      if (game.addPlayer(socket.id, playerName)) {
+        // Başarıyla eklendi
+        console.log(`✅ Player ${playerName} (${socket.id}) joined okey room ${roomId}`);
+        console.log(`🎴 Total players after join: ${game.players.size}`);
+
+        // Oyun durumunu gönder
+        game.broadcastGameState();
+      } else {
+        // Oda dolu
+        socket.emit('okey-join-error', { message: 'Oda dolu. Başka bir oda deneyin.' });
+      }
+    });
+
+    socket.on('okey-start-game', (data) => {
+      const { roomId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.startGame();
+      if (!success) {
+        socket.emit('okey-error', 'Oyun başlatılamadı');
+      }
+    });
+
+    socket.on('okey-draw-tile', (data) => {
+      const { roomId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.drawTile(socket.id);
+      if (!success) {
+        socket.emit('okey-error', 'Taş çekilemedi');
+      }
+    });
+
+    socket.on('okey-draw-from-discard', (data) => {
+      const { roomId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.drawFromDiscard(socket.id);
+      if (!success) {
+        socket.emit('okey-error', 'Atıktan taş alınamadı');
+      }
+    });
+
+    socket.on('okey-draw-from-player-discard', (data) => {
+      const { roomId, targetPlayerId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.drawFromPlayerDiscard(socket.id, targetPlayerId);
+      if (!success) {
+        socket.emit('okey-error', 'Oyuncu atığından taş alınamadı');
+      }
+    });
+
+    socket.on('okey-discard-tile', (data) => {
+      const { roomId, tileId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.discardTile(socket.id, tileId);
+      if (!success) {
+        socket.emit('okey-error', 'Taş atılamadı');
+      }
+    });
+
+    socket.on('okey-open-set', (data) => {
+      const { roomId, tiles } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.openSets(socket.id, [tiles]);
+      if (!success) {
+        socket.emit('okey-error', 'Set açılamadı');
+      }
+    });
+
+    socket.on('okey-finish-game', (data) => {
+      const { roomId, winningSet } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.finishGame(socket.id, winningSet);
+      if (!success) {
+        socket.emit('okey-error', 'Oyun bitirilemedi');
+      }
+    });
+
+    // Okey folding system events
+    socket.on('okey-fold', (data) => {
+      const { roomId, multiplier } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.proposeFold(socket.id, multiplier);
+      if (!success) {
+        socket.emit('okey-error', 'Katlama teklif edilemedi');
+      }
+    });
+
+    socket.on('okey-accept-fold', (data) => {
+      const { roomId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.respondToFold(socket.id, true);
+      if (!success) {
+        socket.emit('okey-error', 'Katlama kabul edilemedi');
+      }
+    });
+
+    socket.on('okey-reject-fold', (data) => {
+      const { roomId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        socket.emit('okey-error', 'Oyun bulunamadı');
+        return;
+      }
+
+      const success = game.respondToFold(socket.id, false);
+      if (!success) {
+        socket.emit('okey-error', 'Katlama reddedilemedi');
+      }
+    });
+
+    socket.on('okey-leave-game', (data) => {
+      const { roomId } = data;
+      const game = gameRooms.get(roomId);
+
+      if (!game || !(game instanceof OkeyGame)) {
+        return;
+      }
+
+      game.removePlayer(socket.id);
+      game.broadcastGameState();
+    });
+
     // Blöf oyun event'leri
     socket.on('join-bluff-room', (data) => {
       const { roomId, playerName, enableChat } = data;
@@ -2008,7 +3030,14 @@ app.prepare().then(() => {
 
       // Tüm odalardan oyuncuyu çıkar
       for (const [roomId, game] of gameRooms) {
-        if (game instanceof BluffGame) {
+        if (game instanceof OkeyGame) {
+          const hadPlayer = game.players.has(socket.id);
+          if (hadPlayer) {
+            console.log(`🎴 Removing player ${socket.id} from okey room ${roomId}`);
+            game.removePlayer(socket.id);
+            game.broadcastGameState();
+          }
+        } else if (game instanceof BluffGame) {
           const hadPlayer = game.players.has(socket.id);
           if (hadPlayer) {
             console.log(`🎲 Removing player ${socket.id} from bluff room ${roomId}`);
